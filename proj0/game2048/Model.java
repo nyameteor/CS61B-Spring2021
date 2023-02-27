@@ -110,15 +110,65 @@ public class Model extends Observable {
         boolean changed;
         changed = false;
 
-        // TODO: Modify this.board (and perhaps this.score) to account
-        // for the tilt to the Side SIDE. If the board changed, set the
-        // changed local variable to true.
+        board.setViewingPerspective(side);
+        for (int c = 0; c < board.size(); c++) {
+           if (moveTiles(c)) {
+               changed = true;
+           }
+        }
+        board.setViewingPerspective(Side.NORTH);
 
         checkGameOver();
         if (changed) {
             setChanged();
         }
         return changed;
+    }
+
+    /**
+     * Move and merge tiles within a column (use the up (Side.NORTH) direction).
+     * Will update the board and the score.
+     * */
+    private Boolean moveTiles(int c) {
+        int size = board.size();
+
+        // track if any tiles have moved
+        boolean moved = false;
+
+        // track row and value of previous tile
+        int pr = size;
+        int pv = 0;
+        // track if previous tile has been merged
+        boolean pm = false;
+
+        // Moving tiles from northernmost (row n) to southernmost (row 0),
+        // since there’s no way a tile will have to move again after moving once.
+        for (int r = size - 1; r >= 0; r--) {
+            Tile t = board.tile(c, r);
+            if (t == null) {
+                continue;
+            }
+            if (!pm && pv == t.value()) {
+                // move and merge tile
+                board.move(c, pr, t);
+                moved = true;
+                pv = 2 * t.value();
+                pm = true;
+                // update the score
+                score += 2 * t.value();
+            } else {
+                if (r != pr - 1) {
+                    // move tile
+                    board.move(c, pr - 1, t);
+                    moved = true;
+                }
+                pv = t.value();
+                pr = pr - 1;
+                pm = false;
+            }
+        }
+
+        return moved;
     }
 
     /** Checks if the game is over and sets the gameOver variable
