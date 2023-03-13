@@ -15,11 +15,6 @@ public interface Deque<T> {
     void addLast(T item);
 
     /**
-     * Returns true if deque is empty, false otherwise.
-     */
-    boolean isEmpty();
-
-    /**
      * Returns the number of items in the deque.
      */
     int size();
@@ -47,4 +42,11 @@ public interface Deque<T> {
      * If no such item exists, returns null. Must not alter the deque!
      */
     T get(int index);
+
+    /**
+     * Returns true if deque is empty, false otherwise.
+     */
+    default boolean isEmpty() {
+        return size() == 0;
+    }
 }
