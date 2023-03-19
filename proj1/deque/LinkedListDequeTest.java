@@ -119,4 +119,19 @@ public class LinkedListDequeTest {
         }
 
     }
+
+    @Test
+    public void iteratorTest() {
+
+        LinkedListDeque<Integer> lld1 = new LinkedListDeque<>();
+        for (int i = 0; i < 1000000; i++) {
+            lld1.addLast(i);
+        }
+
+        int expected = 0;
+        for (int x : lld1) {
+            assertEquals("Should have the same value", expected, x);
+            expected += 1;
+        }
+    }
 }

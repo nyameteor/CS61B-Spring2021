@@ -1,6 +1,8 @@
 package deque;
 
-public class ArrayDeque<T> implements Deque<T> {
+import java.util.Iterator;
+
+public class ArrayDeque<T> implements Deque<T>, Iterable<T> {
 
     // The index to insert next first element
     private int frontIndex;
@@ -117,6 +119,27 @@ public class ArrayDeque<T> implements Deque<T> {
             return items[(frontIndex + 1 + index) % items.length];
         } else {
             return null;
+        }
+    }
+
+    @Override
+    public Iterator<T> iterator() {
+        return new ArrayDequeIterator();
+    }
+
+    private class ArrayDequeIterator implements Iterator<T> {
+        private int pos = 0;
+
+        @Override
+        public boolean hasNext() {
+            return pos < size;
+        }
+
+        @Override
+        public T next() {
+            T item = items[(frontIndex + 1 + pos) % items.length];
+            pos += 1;
+            return item;
         }
     }
 }

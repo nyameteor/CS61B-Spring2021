@@ -118,4 +118,19 @@ public class ArrayDequeTest {
         }
 
     }
+
+    @Test
+    public void iteratorTest() {
+
+        ArrayDeque<Integer> ad1 = new ArrayDeque<>();
+        for (int i = 0; i < 1000000; i++) {
+            ad1.addLast(i);
+        }
+
+        int expected = 0;
+        for (int x : ad1) {
+            assertEquals("Should have the same value", expected, x);
+            expected += 1;
+        }
+    }
 }
