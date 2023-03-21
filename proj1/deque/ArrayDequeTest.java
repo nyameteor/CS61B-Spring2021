@@ -133,4 +133,28 @@ public class ArrayDequeTest {
             expected += 1;
         }
     }
+
+    @Test
+    public void equalTest() {
+
+        ArrayDeque<Integer> ad1 = new ArrayDeque<>();
+        for (int i = 0; i < 1000000; i++) {
+            ad1.addLast(i);
+        }
+
+        ArrayDeque<Integer> ad2 = new ArrayDeque<>();
+        for (int i = 0; i < 1000000; i++) {
+            ad2.addLast(i);
+        }
+
+        ArrayDeque<Integer> ad3 = new ArrayDeque<>();
+        for (int i = 0; i < 500000; i++) {
+            ad3.addLast(i);
+        }
+
+        assertTrue("Should be equal with same content", ad1.equals(ad2));
+        assertFalse("Should not be equal with different content", ad1.equals(ad3));
+        assertFalse("Should not be equal with other type object", ad1.equals(new Object()));
+        assertFalse("Should not be equal with null", ad1.equals(null));
+    }
 }

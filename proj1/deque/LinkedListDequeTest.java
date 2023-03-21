@@ -134,4 +134,28 @@ public class LinkedListDequeTest {
             expected += 1;
         }
     }
+
+    @Test
+    public void equalTest() {
+
+        LinkedListDeque<Integer> lld1 = new LinkedListDeque<>();
+        for (int i = 0; i < 1000000; i++) {
+            lld1.addLast(i);
+        }
+
+        LinkedListDeque<Integer> lld2 = new LinkedListDeque<>();
+        for (int i = 0; i < 1000000; i++) {
+            lld2.addLast(i);
+        }
+
+        LinkedListDeque<Integer> lld3 = new LinkedListDeque<>();
+        for (int i = 0; i < 500000; i++) {
+            lld3.addLast(i);
+        }
+
+        assertTrue("Should be equal with same content", lld1.equals(lld2));
+        assertFalse("Should not be equal with different content", lld1.equals(lld3));
+        assertFalse("Should not be equal with other type object", lld1.equals(new Object()));
+        assertFalse("Should not be equal with null", lld1.equals(null));
+    }
 }
