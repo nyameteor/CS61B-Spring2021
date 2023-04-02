@@ -7,7 +7,7 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V> {
     private int size = 0;
 
     private class Node {
-        private final K key;
+        private K key;
         private V value;
         private Node left;
         private Node right;
@@ -26,15 +26,6 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V> {
 
         public void setValue(V value) {
             this.value = value;
-        }
-    }
-
-    V findValue(Node node, K key) {
-        Node findNode = find(node, key);
-        if (findNode == null) {
-            return null;
-        } else {
-            return findNode.value;
         }
     }
 
@@ -67,6 +58,43 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V> {
         return node;
     }
 
+    Node delete(Node cur, K key) {
+        if (cur == null) {
+            return null;
+        }
+        int cmp = cur.key.compareTo(key);
+        if (cmp > 0) {
+            cur.left = delete(cur.left, key);
+        } else if (cmp < 0) {
+            cur.right = delete(cur.right, key);
+        } else {
+            if (cur.left == null && cur.right == null) {
+                // no children
+                return null;
+            } else if (cur.left == null || cur.right == null) {
+                // one child
+                return cur.left != null ? cur.left : cur.right;
+            } else {
+                // two children
+                Node p = cur;
+                Node q = cur.right;
+                // find successor
+                while (q.left != null) {
+                    p = q;
+                    q = q.left;
+                }
+                cur.key = q.key;
+                cur.value = q.value;
+                if (p.left == q) {
+                    p.left = q.right != null ? q.right : null;
+                } else {
+                    p.right = q.right != null ? q.right : null;
+                }
+            }
+        }
+        return cur;
+    }
+
     public BSTMap() {
     }
 
@@ -83,7 +111,12 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V> {
 
     @Override
     public V get(K key) {
-        return findValue(this.node, key);
+        Node findNode = find(this.node, key);
+        if (findNode == null) {
+            return null;
+        } else {
+            return findNode.value;
+        }
     }
 
     @Override
@@ -93,8 +126,13 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V> {
 
     @Override
     public void put(K key, V value) {
-        this.node = insert(this.node, key, value);
-        this.size += 1;
+        Node findNode = find(this.node, key);
+        if (findNode != null) {
+            findNode.setValue(value);
+        } else {
+            this.node = insert(this.node, key, value);
+            this.size += 1;
+        }
     }
 
     @Override
@@ -108,12 +146,26 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V> {
 
     @Override
     public V remove(K key) {
-        throw new UnsupportedOperationException();
+        Node findNode = find(this.node, key);
+        if (findNode == null) {
+            return null;
+        } else {
+            this.size -= 1;
+            this.node = delete(this.node, key);
+            return findNode.value;
+        }
     }
 
     @Override
     public V remove(K key, V value) {
-        throw new UnsupportedOperationException();
+        Node findNode = find(this.node, key);
+        if (findNode == null || findNode.value != value) {
+            return null;
+        } else {
+            this.size -= 1;
+            this.node = delete(this.node, key);
+            return findNode.value;
+        }
     }
 
     @Override
