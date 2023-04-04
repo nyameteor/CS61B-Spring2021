@@ -112,22 +112,69 @@ public class MyHashMap<K, V> implements Map61B<K, V> {
         return putNode(this.buckets, node);
     }
 
-    // Return the inserted node if node's key is not present, else return null.
+    // Return the inserted node if node's key is not present, else return null
     private Node putNode(Collection<Node>[] buckets, Node node) {
         int index = getIndex(buckets, node.key);
         if (buckets[index] == null) {
             buckets[index] = createBucket();
         }
-        // Update value if key is present
+        // Update node's value if key is present
         for (Node x : buckets[index]) {
             if (x.key.equals(node.key)) {
                 x.value = node.value;
                 return null;
             }
         }
-        // Or insert new key value pair
+        // Or insert new node
         buckets[index].add(node);
         return node;
+    }
+
+    private Node removeNode(K key) {
+        return removeNode(this.buckets, key);
+    }
+
+    // Return the removed node if node's key is present, else return null
+    private Node removeNode(Collection<Node>[] buckets, K key) {
+        int index = getIndex(buckets, key);
+        if (buckets[index] == null) {
+            return null;
+        }
+        for (Node x : buckets[index]) {
+            if (x.key.equals(key)) {
+                Node res = createNode(x.key, x.value);
+                buckets[index].remove(x);
+                if (buckets[index].size() == 0) {
+                    buckets[index] = null;
+                }
+                return res;
+            }
+        }
+        return null;
+    }
+
+    private Node removeNode(K key, V value) {
+        return removeNode(this.buckets, key, value);
+    }
+
+    // Return the removed node if node's key is present and mapped to specified value,
+    // else return null
+    private Node removeNode(Collection<Node>[] buckets, K key, V value) {
+        int index = getIndex(buckets, key);
+        if (buckets[index] == null) {
+            return null;
+        }
+        for (Node x : buckets[index]) {
+            if (x.key.equals(key) && x.value.equals(value)) {
+                Node res = createNode(x.key, x.value);
+                buckets[index].remove(x);
+                if (buckets[index].size() == 0) {
+                    buckets[index] = null;
+                }
+                return res;
+            }
+        }
+        return null;
     }
 
     private void conditionalResize() {
@@ -189,9 +236,11 @@ public class MyHashMap<K, V> implements Map61B<K, V> {
     @Override
     public void put(K key, V value) {
         conditionalResize();
-        if (putNode(createNode(key, value)) != null) {
-            size += 1;
+        Node x = putNode(createNode(key, value));
+        if (x == null) {
+            return;
         }
+        this.size += 1;
     }
 
     @Override
@@ -205,12 +254,22 @@ public class MyHashMap<K, V> implements Map61B<K, V> {
 
     @Override
     public V remove(K key) {
-        throw new UnsupportedOperationException();
+        Node x = removeNode(key);
+        if (x == null) {
+            return null;
+        }
+        this.size -= 1;
+        return x.value;
     }
 
     @Override
     public V remove(K key, V value) {
-        throw new UnsupportedOperationException();
+        Node x = removeNode(key, value);
+        if (x == null) {
+            return null;
+        }
+        this.size -= 1;
+        return x.value;
     }
 
     @Override
@@ -223,29 +282,43 @@ public class MyHashMap<K, V> implements Map61B<K, V> {
         // Iterator of bucket
         private Iterator<Node> bIterator;
 
-        // index of bucket in buckets
-        private int index = -1;
+        // Index of bucket
+        private int index = 0;
 
-        private int remain = size;
+        public MyHashMapIterator() {
+            // Advance to first non-null bucket
+            while (index < buckets.length && buckets[index] == null) {
+                index += 1;
+            }
+            // No next non-null bucket
+            if (index >= buckets.length) {
+                return;
+            }
+            bIterator = buckets[index].iterator();
+        }
 
         @Override
         public boolean hasNext() {
-            return remain > 0;
+            if (bIterator.hasNext()) {
+                return true;
+            }
+            // Advance to next non-null bucket
+            index += 1;
+            while (index < buckets.length && buckets[index] == null) {
+                index += 1;
+            }
+            // No next non-null bucket
+            if (index >= buckets.length) {
+                return false;
+            }
+            bIterator = buckets[index].iterator();
+            return true;
         }
 
         @Override
         public K next() {
             if (!hasNext()) {
                 throw new NoSuchElementException();
-            }
-            remain -= 1;
-            // Find next bucket iterator
-            if (bIterator == null || !bIterator.hasNext()) {
-                index += 1;
-                while (buckets[index] == null) {
-                    index += 1;
-                }
-                bIterator = buckets[index].iterator();
             }
             return bIterator.next().key;
         }
