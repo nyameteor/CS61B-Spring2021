@@ -135,7 +135,7 @@ public class ArrayDequeTest {
     }
 
     @Test
-    public void equalTest() {
+    public void equalTest1() {
 
         ArrayDeque<Integer> ad1 = new ArrayDeque<>();
         for (int i = 0; i < 1000000; i++) {
@@ -152,9 +152,31 @@ public class ArrayDequeTest {
             ad3.addLast(i);
         }
 
-        assertTrue("Should be equal with same content", ad1.equals(ad2));
-        assertFalse("Should not be equal with different content", ad1.equals(ad3));
-        assertFalse("Should not be equal with other type object", ad1.equals(new Object()));
-        assertFalse("Should not be equal with null", ad1.equals(null));
+        assertEquals("Should be equal with same content", ad1, ad2);
+        assertNotEquals("Should not be equal with different content", ad1, ad3);
+        assertNotEquals("Should not be equal with other type object", ad1, new Object());
+        assertNotEquals("Should not be equal with null", null, ad1);
+    }
+
+    @Test
+    /* ArrayDeques and LinkedListDeques with the same elements should be equal */
+    public void equalTest2() {
+        ArrayDeque<Integer> ad1 = new ArrayDeque<>();
+        for (int i = 0; i < 1000000; i++) {
+            ad1.addLast(i);
+        }
+
+        LinkedListDeque<Integer> lld1 = new LinkedListDeque<>();
+        for (int i = 0; i < 1000000; i++) {
+            lld1.addLast(i);
+        }
+
+        LinkedListDeque<Integer> lld2 = new LinkedListDeque<>();
+        for (int i = 0; i < 500000; i++) {
+            lld2.addLast(i);
+        }
+
+        assertEquals("Should be equal with same content", ad1, lld1);
+        assertNotEquals("Should not be equal with different content", ad1, lld2);
     }
 }
