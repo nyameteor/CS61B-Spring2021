@@ -1,5 +1,6 @@
 package deque;
 
+import edu.princeton.cs.algs4.StdRandom;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -229,5 +230,59 @@ public class LinkedListDequeTest {
 
         lld1.addFirst(1);
         assertEquals(1, lld1.getRecursive(0).intValue());
+    }
+
+    @Test
+    public void randomizedTest() {
+        java.util.LinkedList<Integer> ld1 = new java.util.LinkedList<>();
+        LinkedListDeque<Integer> ld2 = new LinkedListDeque<>();
+
+        int N = 50000;
+        for (int i = 0; i < N; i++) {
+            int operationNumber = StdRandom.uniform(0, 8);
+            if (operationNumber == 0) {
+                // addFirst
+                int randVal = StdRandom.uniform(0, 100);
+                ld1.addFirst(randVal);
+                ld2.addFirst(randVal);
+            } else if (operationNumber == 1) {
+                // addLast
+                int randVal = StdRandom.uniform(0, 100);
+                ld1.addLast(randVal);
+                ld2.addLast(randVal);
+            } else if (operationNumber == 2) {
+                // isEmpty
+                assertEquals(ld1.isEmpty(), ld2.isEmpty());
+            } else if (operationNumber == 3) {
+                // size
+                assertEquals(ld1.size(), ld2.size());
+            } else if (operationNumber == 4) {
+                // removeFirst
+                if (ld1.isEmpty()) {
+                    continue;
+                }
+                assertEquals(ld1.removeFirst(), ld2.removeFirst());
+            } else if (operationNumber == 5) {
+                // removeLast
+                if (ld1.isEmpty()) {
+                    continue;
+                }
+                assertEquals(ld1.removeLast(), ld2.removeLast());
+            } else if (operationNumber == 6) {
+                // iterative get
+                if (ld1.isEmpty()) {
+                    continue;
+                }
+                int randIndex = StdRandom.uniform(0, ld1.size());
+                assertEquals(ld1.get(randIndex), ld2.get(randIndex));
+            } else if (operationNumber == 7) {
+                // recursive get
+                if (ld1.isEmpty()) {
+                    continue;
+                }
+                int randIndex = StdRandom.uniform(0, ld1.size());
+                assertEquals(ld1.get(randIndex), ld2.getRecursive(randIndex));
+            }
+        }
     }
 }

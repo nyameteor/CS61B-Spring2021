@@ -4,7 +4,7 @@ import java.util.Iterator;
 
 public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
 
-    class Node {
+    private class Node {
         T item;
         Node prev;
         Node next;
@@ -96,7 +96,7 @@ public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
             }
         } else {
             p = sentinel.prev;
-            for (int i = size; i > index; i--) {
+            for (int i = size - 1; i > index; i--) {
                 p = p.prev;
             }
         }
@@ -113,7 +113,7 @@ public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
             return getForward(index, p);
         } else {
             p = sentinel.prev;
-            return getBackward(size - index, p);
+            return getBackward(size - 1 - index, p);
         }
     }
 

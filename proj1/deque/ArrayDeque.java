@@ -13,9 +13,9 @@ public class ArrayDeque<T> implements Deque<T>, Iterable<T> {
     // The index to insert next last element
     private int backIndex;
 
-    static final int INITIAL_CAPACITY = 16;
-    static final int EXTEND_REFACTOR = 2;
-    static final int SHRINK_REFACTOR = 4;
+    private static final int INITIAL_CAPACITY = 16;
+    private static final int EXTEND_REFACTOR = 2;
+    private static final int SHRINK_REFACTOR = 4;
 
     public ArrayDeque() {
         items = (T[]) new Object[INITIAL_CAPACITY];
