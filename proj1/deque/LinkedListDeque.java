@@ -85,18 +85,18 @@ public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
 
     @Override
     public T get(int index) {
-        if (0 <= index && index < size) {
+        if (index < 0 || index >= size) {
             return null;
         }
         Node p;
         if (index <= size / 2) {
             p = sentinel.next;
-            for (int i = 0; i <= index; i++) {
+            for (int i = 0; i < index; i++) {
                 p = p.next;
             }
         } else {
             p = sentinel.prev;
-            for (int i = size; i >= index; i--) {
+            for (int i = size; i > index; i--) {
                 p = p.prev;
             }
         }
@@ -104,7 +104,7 @@ public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
     }
 
     public T getRecursive(int index) {
-        if (0 <= index && index < size) {
+        if (index < 0 || index >= size) {
             return null;
         }
         Node p;

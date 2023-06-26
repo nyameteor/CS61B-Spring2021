@@ -202,4 +202,32 @@ public class LinkedListDequeTest {
         lld1.addLast(3);
         assertEquals(3, lld1.removeFirst().intValue());
     }
+
+    @Test
+    public void randomTest3() {
+        LinkedListDeque<Integer> lld1 = new LinkedListDeque<>();
+
+        assertTrue(lld1.isEmpty());
+        lld1.addLast(1);
+        assertEquals(1, lld1.removeFirst().intValue());
+        lld1.addFirst(3);
+        assertEquals(3, lld1.removeLast().intValue());
+    }
+
+    @Test
+    public void iterativeGetTest() {
+        LinkedListDeque<Integer> lld1 = new LinkedListDeque<>();
+
+        lld1.addFirst(1);
+        lld1.addLast(2);
+        assertEquals(1, lld1.get(0).intValue());
+    }
+
+    @Test
+    public void recursiveGetTest() {
+        LinkedListDeque<Integer> lld1 = new LinkedListDeque<>();
+
+        lld1.addFirst(1);
+        assertEquals(1, lld1.getRecursive(0).intValue());
+    }
 }
