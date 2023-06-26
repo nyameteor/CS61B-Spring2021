@@ -180,4 +180,26 @@ public class LinkedListDequeTest {
         assertEquals("Should be equal with same content", lld1, ad1);
         assertNotEquals("Should not be equal with different content", lld1, ad2);
     }
+
+    @Test
+    public void randomTest1() {
+        LinkedListDeque<Integer> lld1 = new LinkedListDeque<>();
+
+        assertTrue(lld1.isEmpty());
+        lld1.addFirst(1);
+        assertEquals(1, lld1.removeLast().intValue());
+        lld1.addFirst(3);
+        assertEquals(3, lld1.removeLast().intValue());
+    }
+
+    @Test
+    public void randomTest2() {
+        LinkedListDeque<Integer> lld1 = new LinkedListDeque<>();
+
+        assertTrue(lld1.isEmpty());
+        lld1.addLast(1);
+        assertEquals(1, lld1.removeFirst().intValue());
+        lld1.addLast(3);
+        assertEquals(3, lld1.removeFirst().intValue());
+    }
 }
