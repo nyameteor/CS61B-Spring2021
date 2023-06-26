@@ -4,28 +4,32 @@ import java.util.Iterator;
 
 public class ArrayDeque<T> implements Deque<T>, Iterable<T> {
 
+    private T[] items;
+    private int size;
+
     // The index to insert next first element
     private int frontIndex;
+
     // The index to insert next last element
     private int backIndex;
-    private int size;
-    private T[] items;
+
+    static final int INITIAL_CAPACITY = 16;
+    static final int EXTEND_REFACTOR = 2;
+    static final int SHRINK_REFACTOR = 4;
 
     public ArrayDeque() {
-        items = (T[]) new Object[100];
+        items = (T[]) new Object[INITIAL_CAPACITY];
         frontIndex = items.length - 1;
         backIndex = 0;
     }
 
     private void conditionalExtend() {
-        final int EXTEND_REFACTOR = 2;
         if (size == items.length) {
             resize(items.length * EXTEND_REFACTOR);
         }
     }
 
     private void conditionalShrink() {
-        final int SHRINK_REFACTOR = 4;
         if ((size < items.length / SHRINK_REFACTOR) && (size > SHRINK_REFACTOR)) {
             resize(items.length / SHRINK_REFACTOR);
         }

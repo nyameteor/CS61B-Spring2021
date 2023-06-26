@@ -5,15 +5,15 @@ import java.util.Iterator;
 public class LinkedListDeque<T> implements Deque<T>, Iterable<T> {
 
     class Node {
-        public T item;
-        public Node prev;
-        public Node next;
+        T item;
+        Node prev;
+        Node next;
 
-        public Node() {
+        Node() {
             item = null;
         }
 
-        public Node(T i, Node p, Node n) {
+        Node(T i, Node p, Node n) {
             item = i;
             prev = p;
             next = n;
