@@ -1,0 +1,117 @@
+package gitlet;
+
+import java.io.Serializable;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+
+/**
+ * Represents a gitlet index.
+ */
+public class Index implements Dumpable {
+    private class Node implements Serializable {
+        private final String name;
+        private final String id;
+        Map<String, Node> childMap;
+
+        public Node(String name, String id, Map<String, Node> childMap) {
+            this.name = name;
+            this.id = id;
+            this.childMap = childMap;
+        }
+
+        public Node(String name, String id) {
+            this.name = name;
+            this.id = id;
+            this.childMap = null;
+        }
+
+        @Override
+        public String toString() {
+            return "Node{" +
+                    "name='" + name + '\'' +
+                    ", id='" + id + '\'' +
+                    ", childMap=" + childMap +
+                    '}';
+        }
+    }
+
+    private final Node root;
+
+    private static final String ROOT_NODE_NAME = ".";
+
+    public Index() {
+        this.root = new Node(ROOT_NODE_NAME, null, new TreeMap<>());
+    }
+
+    @Override
+    public String toString() {
+        return "Index{" +
+                "root=" + root +
+                '}';
+    }
+
+    @Override
+    public void dump() {
+        System.out.println(this);
+    }
+
+    /**
+     * Add a leaf node with filePath, will create its parent node if needed.
+     */
+    public void addNode(List<String> filePath, String id) {
+        addNode(this.root, filePath, id);
+    }
+
+    /**
+     * Remove a leaf node with filePath, will remove its parent node if needed.
+     */
+    public void removeNode(List<String> filePath) {
+        removeNode(this.root, null, filePath);
+    }
+
+    private void addNode(Node node, List<String> filePath, String id) {
+        if (filePath.size() == 1) {
+            String filename = filePath.get(0);
+            // Leaf node represents a blob object, it has id for comparing.
+            node.childMap.put(filename, new Node(filename, id));
+        } else {
+            // Other node represents a tree object
+            String dirname = filePath.get(0);
+            if (!node.childMap.containsKey(dirname)) {
+                node.childMap.put(dirname, new Node(dirname, null, new TreeMap<>()));
+            }
+            addNode(node.childMap.get(dirname), filePath.subList(1, filePath.size()), id);
+        }
+    }
+
+    private void removeNode(Node parentNode, Node grandparentNode, List<String> filePath) {
+        if (filePath.size() == 1) {
+            String filename = filePath.get(0);
+            if (parentNode.childMap.containsKey(filename)) {
+                Node node = parentNode.childMap.get(filename);
+                if (isLeaf(node)) {
+                    parentNode.childMap.remove(filename);
+                }
+                return;
+            }
+        }
+        String dirname = filePath.get(0);
+        if (parentNode.childMap.containsKey(dirname)) {
+            removeNode(parentNode.childMap.get(dirname), parentNode,
+                    filePath.subList(1, filePath.size()));
+        }
+        if (parentNode.childMap.size() == 0 && !isRoot(parentNode)) {
+            grandparentNode.childMap.remove(parentNode.name);
+        }
+    }
+
+    private boolean isLeaf(Node node) {
+        return Objects.isNull(node.childMap);
+    }
+
+    private boolean isRoot(Node node) {
+        return ROOT_NODE_NAME.equals(node.name);
+    }
+}
