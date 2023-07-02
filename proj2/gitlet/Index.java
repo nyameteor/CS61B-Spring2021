@@ -7,12 +7,12 @@ import java.util.Objects;
 import java.util.TreeMap;
 
 /**
- * Represents a gitlet index.
+ * Represents the gitlet index.
  */
 public class Index implements Dumpable {
-    private class Node implements Serializable {
-        private final String name;
-        private final String id;
+    static class Node implements Serializable {
+        final String name;
+        final String id;
         Map<String, Node> childMap;
 
         public Node(String name, String id, Map<String, Node> childMap) {
@@ -37,7 +37,7 @@ public class Index implements Dumpable {
         }
     }
 
-    private final Node root;
+    final Node root;
 
     private static final String ROOT_NODE_NAME = ".";
 
@@ -58,37 +58,37 @@ public class Index implements Dumpable {
     }
 
     /**
-     * Add a leaf node with filePath, will create its parent node if needed.
+     * Add a leaf node with pathParts, will create its parent node if needed.
      */
-    public void addNode(List<String> filePath, String id) {
-        addNode(this.root, filePath, id);
+    public void addNode(List<String> pathParts, String id) {
+        addNode(this.root, pathParts, id);
     }
 
     /**
-     * Remove a leaf node with filePath, will remove its parent node if needed.
+     * Remove a leaf node with pathParts, will remove its parent node if needed.
      */
-    public void removeNode(List<String> filePath) {
-        removeNode(this.root, null, filePath);
+    public void removeNode(List<String> pathParts) {
+        removeNode(this.root, null, pathParts);
     }
 
-    private void addNode(Node node, List<String> filePath, String id) {
-        if (filePath.size() == 1) {
-            String filename = filePath.get(0);
+    private void addNode(Node node, List<String> pathParts, String id) {
+        if (pathParts.size() == 1) {
+            String filename = pathParts.get(0);
             // Leaf node represents a blob object, it has id for comparing.
             node.childMap.put(filename, new Node(filename, id));
         } else {
             // Other node represents a tree object
-            String dirname = filePath.get(0);
+            String dirname = pathParts.get(0);
             if (!node.childMap.containsKey(dirname)) {
                 node.childMap.put(dirname, new Node(dirname, null, new TreeMap<>()));
             }
-            addNode(node.childMap.get(dirname), filePath.subList(1, filePath.size()), id);
+            addNode(node.childMap.get(dirname), pathParts.subList(1, pathParts.size()), id);
         }
     }
 
-    private void removeNode(Node parentNode, Node grandparentNode, List<String> filePath) {
-        if (filePath.size() == 1) {
-            String filename = filePath.get(0);
+    private void removeNode(Node parentNode, Node grandparentNode, List<String> pathParts) {
+        if (pathParts.size() == 1) {
+            String filename = pathParts.get(0);
             if (parentNode.childMap.containsKey(filename)) {
                 Node node = parentNode.childMap.get(filename);
                 if (isLeaf(node)) {
@@ -97,21 +97,21 @@ public class Index implements Dumpable {
                 return;
             }
         }
-        String dirname = filePath.get(0);
+        String dirname = pathParts.get(0);
         if (parentNode.childMap.containsKey(dirname)) {
             removeNode(parentNode.childMap.get(dirname), parentNode,
-                    filePath.subList(1, filePath.size()));
+                    pathParts.subList(1, pathParts.size()));
         }
         if (parentNode.childMap.size() == 0 && !isRoot(parentNode)) {
             grandparentNode.childMap.remove(parentNode.name);
         }
     }
 
-    private boolean isLeaf(Node node) {
+    public boolean isLeaf(Node node) {
         return Objects.isNull(node.childMap);
     }
 
-    private boolean isRoot(Node node) {
+    public boolean isRoot(Node node) {
         return ROOT_NODE_NAME.equals(node.name);
     }
 }

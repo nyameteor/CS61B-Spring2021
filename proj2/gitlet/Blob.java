@@ -3,7 +3,7 @@ package gitlet;
 /**
  * Represents a gitlet blob object.
  */
-public class Blob implements Dumpable {
+public class Blob extends Obj {
     private String content;
 
     public Blob(String content) {

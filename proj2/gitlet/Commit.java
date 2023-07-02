@@ -7,19 +7,19 @@ import java.util.List;
 /**
  * Represents a gitlet commit object.
  */
-public class Commit implements Dumpable {
+public class Commit extends Obj {
 
     private Date date;
 
-    private Tree tree;
+    private String treeId;
 
     private String message;
 
     private List<Commit> parents;
 
-    public Commit(Date date, Tree tree, String message, List<Commit> parents) {
+    public Commit(Date date, String treeId, String message, List<Commit> parents) {
         this.date = date;
-        this.tree = tree;
+        this.treeId = treeId;
         this.message = message;
         this.parents = parents;
     }
@@ -32,12 +32,12 @@ public class Commit implements Dumpable {
         this.date = date;
     }
 
-    public Tree getTree() {
-        return tree;
+    public String getTreeId() {
+        return treeId;
     }
 
-    public void setTree(Tree tree) {
-        this.tree = tree;
+    public void setTreeId(String treeId) {
+        this.treeId = treeId;
     }
 
     public String getMessage() {
@@ -60,7 +60,7 @@ public class Commit implements Dumpable {
     public String toString() {
         return "Commit{" +
                 "date=" + date +
-                ", tree=" + tree +
+                ", treeId='" + treeId + '\'' +
                 ", message='" + message + '\'' +
                 ", parents=" + parents +
                 '}';
