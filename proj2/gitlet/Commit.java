@@ -15,13 +15,13 @@ public class Commit extends Obj {
 
     private String message;
 
-    private List<Commit> parents;
+    private List<String> parentIds;
 
-    public Commit(Date date, String treeId, String message, List<Commit> parents) {
+    public Commit(Date date, String treeId, String message, List<String> parentIds) {
         this.date = date;
         this.treeId = treeId;
         this.message = message;
-        this.parents = parents;
+        this.parentIds = parentIds;
     }
 
     public Date getDate() {
@@ -48,12 +48,12 @@ public class Commit extends Obj {
         this.message = message;
     }
 
-    public List<Commit> getParents() {
-        return parents;
+    public List<String> getParentIds() {
+        return parentIds;
     }
 
-    public void setParents(List<Commit> parents) {
-        this.parents = parents;
+    public void setParentIds(List<String> parentIds) {
+        this.parentIds = parentIds;
     }
 
     @Override
@@ -62,7 +62,7 @@ public class Commit extends Obj {
                 "date=" + date +
                 ", treeId='" + treeId + '\'' +
                 ", message='" + message + '\'' +
-                ", parents=" + parents +
+                ", parentIds=" + parentIds +
                 '}';
     }
 
