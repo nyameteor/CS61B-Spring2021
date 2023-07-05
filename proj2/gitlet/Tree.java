@@ -1,16 +1,16 @@
 package gitlet;
 
 import java.io.Serializable;
-import java.util.List;
+import java.util.Map;
 
 /**
  * Represents a gitlet tree object.
  */
 public class Tree extends Obj {
-    static final String ENTRY_TYPE_BLOB = "blob";
-    static final String ENTRY_TYPE_TREE = "tree";
-
     static class Entry implements Serializable {
+        static final String BLOB_TYPE = "blob";
+        static final String TREE_TYPE = "tree";
+
         String name;
         String type;
         String id;
@@ -31,27 +31,27 @@ public class Tree extends Obj {
         }
     }
 
-    private List<Entry> entries;
+    private Map<String, Entry> entryMap;
 
     public Tree() {
     }
 
-    public Tree(List<Entry> entries) {
-        this.entries = entries;
+    public Tree(Map<String, Entry> entryMap) {
+        this.entryMap = entryMap;
     }
 
-    public List<Entry> getEntries() {
-        return entries;
+    public Map<String, Entry> getEntryMap() {
+        return entryMap;
     }
 
-    public void setEntries(List<Entry> entries) {
-        this.entries = entries;
+    public void setEntryMap(Map<String, Entry> entryMap) {
+        this.entryMap = entryMap;
     }
 
     @Override
     public String toString() {
         return "Tree{" +
-                "entries=" + entries +
+                "entryMap=" + entryMap +
                 '}';
     }
 

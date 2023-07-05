@@ -79,15 +79,18 @@ public class Index implements Dumpable {
     }
 
     private Node getLeaf(Node node, List<String> parts) {
-        if (isLeaf(node) && parts.size() == 1) {
-            if (node.name.equals(parts.get(0))) {
-                return node;
-            }
+        if (parts.size() < 1) {
+            return null;
         }
-        for (String key : node.childMap.keySet()) {
-            Node leaf = getLeaf(node.childMap.get(key), parts.subList(1, parts.size()));
-            if (Objects.nonNull(leaf)) {
-                return leaf;
+        String part = parts.get(0);
+        if (node.childMap.containsKey(part)) {
+            Node childNode = node.childMap.get(part);
+            if (Objects.equals(childNode.name, part)) {
+                if (isLeaf(childNode) && parts.size() == 1) {
+                    return childNode;
+                } else {
+                    return getLeaf(childNode, parts.subList(1, parts.size()));
+                }
             }
         }
         return null;
