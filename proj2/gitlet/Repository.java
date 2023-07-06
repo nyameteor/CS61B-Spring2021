@@ -1,6 +1,7 @@
 package gitlet;
 
 import java.io.File;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -62,6 +63,16 @@ public class Repository {
      */
     public static final String FILE_SEPARATOR = System.getProperty("file.separator");
 
+    /**
+     * Date pattern.
+     */
+    static final String RFC2822_DATE_PATTERN = "EEE, dd MMM yyyy HH:mm:ss Z";
+
+    /**
+     * Date format.
+     */
+    static final SimpleDateFormat RFC2822_DATE_FORMAT = getDateFormat(RFC2822_DATE_PATTERN);
+
     /* COMMANDS */
 
     static void initCmd() {
@@ -80,7 +91,8 @@ public class Repository {
         // For initial commit, make a commit manually.
         Tree rootTree = indexToTrees(index).get(0);
         putObj(rootTree);
-        Commit commit = new Commit(new Date(0L), objId(rootTree), "initial commit", null);
+        Commit commit = new Commit(new Date(0L), objId(rootTree), "initial commit",
+                new LinkedList<>());
         putObj(commit);
         Branch branch = new Branch(DEFAULT_BRANCH_NAME, objId(commit));
         writeBranch(branch);
@@ -160,6 +172,50 @@ public class Repository {
         } else {
             throw error("No reason to remove the file.");
         }
+    }
+
+    static void logCmd() {
+        List<Commit> commits = lookupCommits(getHeadCommitId());
+        printCommits(commits);
+    }
+
+    static void globalLogCmd() {
+        List<Commit> commits = lookupGlobalCommits();
+        printCommits(commits);
+    }
+
+    static void findCmd(String message) {
+        List<Commit> commits = lookupGlobalCommits(commit ->
+                Objects.equals(message, commit.getMessage()));
+        if (commits.isEmpty()) {
+            throw error("Found no commit with that message.");
+        }
+        List<String> commitIds = commits.stream()
+                .map(Repository::objId)
+                .collect(Collectors.toList());
+        System.out.println(String.join("\n", commitIds));
+    }
+
+    private static void printCommits(List<Commit> commits) {
+        StringBuilder sb = new StringBuilder();
+        for (Commit commit : commits) {
+            String mergeInfo = commit.getParentIds().size() <= 1
+                    ? ""
+                    : "Merge: " + commit.getParentIds().stream()
+                    .map(Repository::shortId)
+                    .collect(Collectors.joining(" ")) + "\n";
+            sb.append(String.format("===\n"
+                            + "commit %s\n"
+                            + "%s"
+                            + "Date: %s\n"
+                            + "%s\n\n",
+                    objId(commit),
+                    mergeInfo,
+                    RFC2822_DATE_FORMAT.format(commit.getDate()),
+                    commit.getMessage())
+            );
+        }
+        System.out.printf("%s", sb);
     }
 
     static void statusCmd() {
@@ -410,7 +466,7 @@ public class Repository {
     /* OBJECT UTILS */
 
     /**
-     * lookup an object from object database.
+     * Lookup an object from object database.
      */
     static <T extends Obj> T lookupObj(String id, Class<T> expectedObjClass) {
         File file = objFilepath(id);
@@ -432,8 +488,68 @@ public class Repository {
         writeObject(file, obj);
     }
 
+    /**
+     * Lookup history commits from a commitId.
+     */
+    static List<Commit> lookupCommits(String commitId) {
+        List<Commit> commits = new LinkedList<>();
+        Commit curCommit = lookupObj(commitId, Commit.class);
+        while (curCommit.getParentIds().size() > 0) {
+            commits.add(curCommit);
+            curCommit = lookupObj(curCommit.getParentIds().get(0), Commit.class);
+        }
+        commits.add(curCommit);
+        return commits;
+    }
+
+    /**
+     * Lookup all commits ever made, The order of the commits does not matter.
+     */
+    static List<Commit> lookupGlobalCommits() {
+        return lookupGlobalCommits(commit -> true);
+    }
+
+    /**
+     * Lookup all commits ever made that satisfy the specified filter,
+     * The order of the commits does not matter.
+     */
+    static List<Commit> lookupGlobalCommits(CommitFilter filter) {
+        List<Commit> commits = new LinkedList<>();
+        List<String> commitIds = listBranchNames().stream()
+                .map((name) -> readBranch(name).getCommitId())
+                .collect(Collectors.toList());
+        lookupGlobalCommitsHelper(commitIds, filter, new HashSet<>(), commits);
+        return commits;
+    }
+
+    private static void lookupGlobalCommitsHelper(List<String> commitIds,
+                                                  CommitFilter filter,
+                                                  Set<String> seenCommitIds,
+                                                  List<Commit> result) {
+        for (String id : commitIds) {
+            if (seenCommitIds.contains(id)) {
+                return;
+            }
+            seenCommitIds.add(id);
+            Commit commit = lookupObj(id, Commit.class);
+            if (filter.accept(commit)) {
+                result.add(commit);
+            }
+            lookupGlobalCommitsHelper(commit.getParentIds(), filter, seenCommitIds, result);
+        }
+    }
+
+    @FunctionalInterface
+    interface CommitFilter {
+        boolean accept(Commit commit);
+    }
+
     static String objId(Obj obj) {
         return sha1(obj.toString());
+    }
+
+    static String shortId(String id) {
+        return id.substring(0, 7);
     }
 
     static File objFilepath(Obj obj) {
@@ -522,5 +638,14 @@ public class Repository {
 
     static void deleteFile(File file) {
         file.delete();
+    }
+
+    /* DATE UTILS */
+
+    static SimpleDateFormat getDateFormat(String pattern) {
+        // https://docs.oracle.com/javase/8/docs/api/java/text/SimpleDateFormat.html
+        SimpleDateFormat format = new SimpleDateFormat(pattern);
+        format.setTimeZone(TimeZone.getDefault());
+        return format;
     }
 }
