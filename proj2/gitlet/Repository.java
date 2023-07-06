@@ -263,11 +263,27 @@ public class Repository {
         );
     }
 
-    /* REFERENCE UTILS */
-
-    static List<String> listBranchNames() {
-        return Utils.plainFilenamesIn(HEADS_DIR);
+    static void branchCmd(String branchName) {
+        List<String> branchNames = listBranchNames();
+        if (branchNames.contains(branchName)) {
+            throw error("A branch with that name already exists.");
+        }
+        Branch branch = new Branch(branchName, getHeadCommitId());
+        writeBranch(branch);
     }
+
+    static void rmBranchCmd(String branchName) {
+        List<String> branchNames = listBranchNames();
+        if (!branchNames.contains(branchName)) {
+            throw error("A branch with that name does not exist.");
+        }
+        if (Objects.equals(branchName, getHeadBranchName())) {
+            throw error("Cannot remove the current branch.");
+        }
+        removeBranch(branchName);
+    }
+
+    /* REFERENCE UTILS */
 
     static Head readHead() {
         return readObject(HEAD_FILE, Head.class);
@@ -301,17 +317,20 @@ public class Repository {
         return head.getBranchName();
     }
 
+    static List<String> listBranchNames() {
+        return plainFilenamesIn(HEADS_DIR);
+    }
+
     static Branch readBranch(String branchName) {
-        List<String> filenames = plainFilenamesIn(HEADS_DIR);
-        if (Objects.nonNull(filenames) && filenames.contains(branchName)) {
-            return readObject(join(HEADS_DIR, branchName), Branch.class);
-        } else {
-            throw error("Branch does not exist.");
-        }
+        return readObject(join(HEADS_DIR, branchName), Branch.class);
     }
 
     static void writeBranch(Branch branch) {
         writeObject(join(HEADS_DIR, branch.getName()), branch);
+    }
+
+    static void removeBranch(String branchName) {
+        deleteFile(join(HEADS_DIR, branchName));
     }
 
     /* INDEX UTILS */
@@ -484,7 +503,10 @@ public class Repository {
         if (file.exists()) {
             return;
         }
-        createDir(file.getParentFile(), true);
+        File parent = file.getParentFile();
+        if (!parent.exists()) {
+            createDir(file.getParentFile());
+        }
         writeObject(file, obj);
     }
 
@@ -566,11 +588,7 @@ public class Repository {
     }
 
     private static Blob createBlob(File file) {
-        if (!file.exists()) {
-            throw error("File does not exist.");
-        } else {
-            return new Blob(readContentsAsString(file));
-        }
+        return new Blob(readContentsAsString(file));
     }
 
     /* FILE UTILS */
@@ -580,9 +598,6 @@ public class Repository {
     }
 
     static File[] listFiles(File dir, Set<String> ignoreFiles) {
-        if (!dir.isDirectory()) {
-            throw error("File is not directory: %s", dir.getPath());
-        }
         return dir.listFiles(
                 (d, name) -> !ignoreFiles.contains(Utils.join(d, name).getName()));
     }
@@ -624,16 +639,7 @@ public class Repository {
     }
 
     static void createDir(File dir) {
-        createDir(dir, false);
-    }
-
-    static void createDir(File dir, boolean existOk) {
-        if (dir.exists() && !existOk) {
-            throw error("Directory already exists: %s", dir.getPath());
-        }
-        if (!dir.exists()) {
-            dir.mkdir();
-        }
+        dir.mkdir();
     }
 
     static void deleteFile(File file) {
