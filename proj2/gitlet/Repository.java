@@ -263,6 +263,54 @@ public class Repository {
         );
     }
 
+    static void checkoutFileCmd(String filePath) {
+        checkoutFileCmd(getHeadCommitId(), filePath);
+    }
+
+    static void checkoutFileCmd(String commitId, String filePath) {
+        Commit commit = lookupObj(commitId, Commit.class);
+        if (Objects.isNull(commit)) {
+            throw error("No commit with that id exists.");
+        }
+        Blob blob = lookupBlob(commitId, filePath);
+        if (Objects.isNull(blob)) {
+            throw error("File does not exist in that commit.");
+        }
+        restoreFile(filePath, blob);
+    }
+
+    static void checkoutBranchCmd(String branchName) {
+        List<String> branchNames = listBranchNames();
+        if (!branchNames.contains(branchName)) {
+            throw error("No such branch exists.");
+        }
+        if (Objects.equals(branchName, getHeadBranchName())) {
+            throw error("No need to checkout the current branch.");
+        }
+
+        String commitId = readBranch(branchName).getCommitId();
+        Commit commit = lookupObj(commitId, Commit.class);
+        Tree tree = lookupObj(commit.getTreeId(), Tree.class);
+        Map<String, String> pathMap = indexToPathMap(treeToIndex(tree));
+
+        List<String> untrackedFiles = new LinkedList<>();
+        diffUntrackedFiles(untrackedFiles);
+        for (String untrackedFile : untrackedFiles) {
+            if (pathMap.containsKey(untrackedFile)) {
+                throw error("There is an untracked file in the way; " +
+                        "delete it, or add and commit it first.");
+            }
+        }
+
+        restoreWd(tree);
+
+        writeIndex(treeToIndex(tree));
+
+        Head head = readHead();
+        head.setBranchName(branchName);
+        writeHead(head);
+    }
+
     static void branchCmd(String branchName) {
         List<String> branchNames = listBranchNames();
         if (branchNames.contains(branchName)) {
@@ -485,7 +533,7 @@ public class Repository {
     /* OBJECT UTILS */
 
     /**
-     * Lookup an object from object database.
+     * Lookup an object from object database, return null if file not exists.
      */
     static <T extends Obj> T lookupObj(String id, Class<T> expectedObjClass) {
         File file = objFilepath(id);
@@ -566,6 +614,121 @@ public class Repository {
         boolean accept(Commit commit);
     }
 
+    /**
+     * Lookup the blob with filePath from the given commitId,
+     * return null if the blob not exists.
+     */
+    static Blob lookupBlob(String commitId, String filePath) {
+        Commit commit = lookupObj(commitId, Commit.class);
+        Tree tree = lookupObj(commit.getTreeId(), Tree.class);
+        return lookupBlobHelper(tree, pathToParts(relativePath(filePath)));
+    }
+
+    private static Blob lookupBlobHelper(Tree tree, List<String> parts) {
+        if (parts.size() < 1) {
+            return null;
+        }
+        String part = parts.get(0);
+        if (tree.getEntryMap().containsKey(part)) {
+            Tree.Entry entry = tree.getEntryMap().get(part);
+            if (Tree.Entry.BLOB_TYPE.equals(entry.type) && parts.size() == 1) {
+                return lookupObj(entry.id, Blob.class);
+            } else {
+                Tree childTree = lookupObj(entry.id, Tree.class);
+                return lookupBlobHelper(childTree, parts.subList(1, parts.size()));
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Restore the working directory to a tree.
+     */
+    static void restoreWd(Tree dstTree) {
+        Tree srcTree = lookupObj(getHeadTreeId(), Tree.class);
+        restoreWdHelper(srcTree, dstTree, new LinkedList<>());
+    }
+
+    /**
+     * Restore the working directory from a srcTree to a dstTree.
+     */
+    private static void restoreWdHelper(Tree srcTree, Tree dstTree, List<String> parts) {
+        for (Tree.Entry srcEntry : srcTree.getEntryMap().values()) {
+            parts.add(srcEntry.name);
+            File file = pathToFile(relativePath(partsToPath(parts)));
+            if (!dstTree.getEntryMap().containsKey(srcEntry.name)) {
+                // Remove files or directories that are not in dstTree.
+                deleteFileOrDir(file);
+            }
+            parts.remove(parts.size() - 1);
+        }
+        for (Tree.Entry dstEntry : dstTree.getEntryMap().values()) {
+            parts.add(dstEntry.name);
+            File file = pathToFile(relativePath(partsToPath(parts)));
+            if (!srcTree.getEntryMap().containsKey(dstEntry.name)) {
+                // Restore files or directories that are not in srcTree.
+                if (Tree.Entry.BLOB_TYPE.equals(dstEntry.type)) {
+                    Blob blob = lookupObj(dstEntry.id, Blob.class);
+                    restoreFile(file, blob);
+                } else {
+                    restoreDir(parts, dstTree);
+                }
+            } else {
+                Tree.Entry srcEntry = srcTree.getEntryMap().get(dstEntry.name);
+                if (Objects.equals(srcEntry.type, dstEntry.type)) {
+                    if (Tree.Entry.TREE_TYPE.equals(srcEntry.type)) {
+                        Tree childSrcTree = lookupObj(srcEntry.id, Tree.class);
+                        Tree childDstTree = lookupObj(dstEntry.id, Tree.class);
+                        restoreWdHelper(childSrcTree, childDstTree, parts);
+                    } else {
+                        if (!Objects.equals(srcEntry.id, dstEntry.id)) {
+                            Blob blob = lookupObj(dstEntry.id, Blob.class);
+                            restoreFile(file, blob);
+                        }
+                    }
+                } else {
+                    if (Tree.Entry.BLOB_TYPE.equals(srcEntry.type)) {
+                        // `file` in srcTree is a file, while in dstTree is a directory.
+                        deleteFile(file);
+                    } else {
+                        // `file` in dstTree is a file, while in srcTree is a directory.
+                        deleteFileOrDir(file);
+                        Blob blob = lookupObj(dstEntry.id, Blob.class);
+                        restoreFile(file, blob);
+                    }
+                }
+            }
+            parts.remove(parts.size() - 1);
+        }
+    }
+
+    static void restoreDir(List<String> parts, Tree tree) {
+        File dir = pathToFile(relativePath(partsToPath(parts)));
+        if (!dir.exists()) {
+            createDir(dir);
+        }
+        for (Tree.Entry entry : tree.getEntryMap().values()) {
+            parts.add(entry.name);
+            File file = pathToFile(relativePath(partsToPath(parts)));
+            if (Tree.Entry.BLOB_TYPE.equals(entry.type)) {
+                Blob blob = lookupObj(entry.id, Blob.class);
+                restoreFile(file, blob);
+            } else {
+                Tree childTree = lookupObj(entry.id, Tree.class);
+                restoreDir(parts, childTree);
+            }
+            parts.remove(parts.size() - 1);
+        }
+    }
+
+    static void restoreFile(String path, Blob blob) {
+        restoreFile(pathToFile(path), blob);
+    }
+
+    static void restoreFile(File file, Blob blob) {
+        writeContents(file, blob.getContent());
+    }
+
     static String objId(Obj obj) {
         return sha1(obj.toString());
     }
@@ -583,11 +746,11 @@ public class Repository {
         return join(Repository.OBJECT_DIR, id.substring(0, 2), id.substring(2));
     }
 
-    private static Blob createBlob(String path) {
-        return createBlob(new File(path));
+    static Blob createBlob(String path) {
+        return createBlob(pathToFile(path));
     }
 
-    private static Blob createBlob(File file) {
+    static Blob createBlob(File file) {
         return new Blob(readContentsAsString(file));
     }
 
@@ -618,6 +781,13 @@ public class Repository {
         }
     }
 
+    /**
+     * Convert relative path to file.
+     */
+    static File pathToFile(String relativePath) {
+        return join(CWD, relativePath);
+    }
+
     static String relativePath(String filePath) {
         return relativePath(new File(filePath));
     }
@@ -644,6 +814,23 @@ public class Repository {
 
     static void deleteFile(File file) {
         file.delete();
+    }
+
+    // Delete a file or delete a directory recursively.
+    static void deleteFileOrDir(File file) {
+        if (file.isDirectory()) {
+            File[] files = file.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    deleteFileOrDir(f);
+                }
+            }
+        }
+        file.delete();
+    }
+
+    static boolean isInitialized() {
+        return GITLET_DIR.exists();
     }
 
     /* DATE UTILS */
