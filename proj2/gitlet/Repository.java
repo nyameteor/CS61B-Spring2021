@@ -291,16 +291,8 @@ public class Repository {
         String commitId = readBranch(branchName).getCommitId();
         Commit commit = lookupObj(commitId, Commit.class);
         Tree tree = lookupObj(commit.getTreeId(), Tree.class);
-        Map<String, String> pathMap = indexToPathMap(treeToIndex(tree));
 
-        List<String> untrackedFiles = new LinkedList<>();
-        diffUntrackedFiles(untrackedFiles);
-        for (String untrackedFile : untrackedFiles) {
-            if (pathMap.containsKey(untrackedFile)) {
-                throw error("There is an untracked file in the way; " +
-                        "delete it, or add and commit it first.");
-            }
-        }
+        validateNoFilesOverwriting(tree);
 
         restoreWd(tree);
 
@@ -329,6 +321,35 @@ public class Repository {
             throw error("Cannot remove the current branch.");
         }
         removeBranch(branchName);
+    }
+
+    static void resetCmd(String commitId) {
+        Commit commit;
+        try {
+            commit = lookupObj(commitId, Commit.class);
+        } catch (GitletException e) {
+            throw error("No commit with that id exists.");
+        }
+        Tree tree = lookupObj(commit.getTreeId(), Tree.class);
+
+        validateNoFilesOverwriting(tree);
+
+        restoreWd(tree);
+
+        writeIndex(treeToIndex(tree));
+
+        Branch branch = readBranch(getHeadBranchName());
+        branch.setCommitId(commitId);
+        writeBranch(branch);
+    }
+
+    private static void validateNoFilesOverwriting(Tree tree) {
+        List<String> untrackedFiles = new LinkedList<>();
+        diffUntrackedFiles(untrackedFiles);
+        if (anyFileInTree(tree, untrackedFiles)) {
+            throw error("There is an untracked file in the way; " +
+                    "delete it, or add and commit it first.");
+        }
     }
 
     /* REFERENCE UTILS */
@@ -463,6 +484,19 @@ public class Repository {
     }
 
     /**
+     * Check if there are any given files in the tree.
+     */
+    private static boolean anyFileInTree(Tree tree, List<String> filePaths) {
+        Map<String, String> pathMap = indexToPathMap(treeToIndex(tree));
+        for (String filePath : filePaths) {
+            if (pathMap.containsKey(filePath)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Return map of filepath -> id
      */
     static Map<String, String> indexToPathMap(Index index) {
@@ -559,7 +593,7 @@ public class Repository {
     }
 
     /**
-     * Lookup history commits from a commitId.
+     * Lookup history commits from the given commitId to the initial commitId.
      */
     static List<Commit> lookupCommits(String commitId) {
         List<Commit> commits = new LinkedList<>();
@@ -688,10 +722,10 @@ public class Repository {
                     }
                 } else {
                     if (Tree.Entry.BLOB_TYPE.equals(srcEntry.type)) {
-                        // `file` in srcTree is a file, while in dstTree is a directory.
+                        // `file` is a file in srcTree, and a directory in dstTree.
                         deleteFile(file);
                     } else {
-                        // `file` in dstTree is a file, while in srcTree is a directory.
+                        // `file` is a file in dstTree, and a directory in srcTree.
                         deleteFileOrDir(file);
                         Blob blob = lookupObj(dstEntry.id, Blob.class);
                         restoreFile(file, blob);
