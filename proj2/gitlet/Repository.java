@@ -66,12 +66,12 @@ public class Repository {
     /**
      * Date pattern.
      */
-    static final String RFC2822_DATE_PATTERN = "EEE, dd MMM yyyy HH:mm:ss Z";
+    static final String DATE_PATTERN = "EEE MMM dd HH:mm:ss yyyy Z";
 
     /**
      * Date format.
      */
-    static final SimpleDateFormat RFC2822_DATE_FORMAT = getDateFormat(RFC2822_DATE_PATTERN);
+    static final SimpleDateFormat DATE_FORMAT = getDateFormat(DATE_PATTERN);
 
     /* COMMANDS */
 
@@ -211,7 +211,7 @@ public class Repository {
                             + "%s\n\n",
                     objId(commit),
                     mergeInfo,
-                    RFC2822_DATE_FORMAT.format(commit.getDate()),
+                    DATE_FORMAT.format(commit.getDate()),
                     commit.getMessage())
             );
         }
