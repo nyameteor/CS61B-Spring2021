@@ -2,6 +2,7 @@ package gitlet;
 
 import java.io.Serializable;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Represents a gitlet tree object.
@@ -21,6 +22,14 @@ public class Tree extends Obj {
             this.id = id;
         }
 
+        public boolean isBlob() {
+            return Objects.equals(BLOB_TYPE, this.type);
+        }
+
+        public boolean isTree() {
+            return Objects.equals(TREE_TYPE, this.type);
+        }
+
         @Override
         public String toString() {
             return "Entry{" +
@@ -31,10 +40,7 @@ public class Tree extends Obj {
         }
     }
 
-    private Map<String, Entry> entryMap;
-
-    public Tree() {
-    }
+    private final Map<String, Entry> entryMap;
 
     public Tree(Map<String, Entry> entryMap) {
         this.entryMap = entryMap;
@@ -42,10 +48,6 @@ public class Tree extends Obj {
 
     public Map<String, Entry> getEntryMap() {
         return entryMap;
-    }
-
-    public void setEntryMap(Map<String, Entry> entryMap) {
-        this.entryMap = entryMap;
     }
 
     @Override

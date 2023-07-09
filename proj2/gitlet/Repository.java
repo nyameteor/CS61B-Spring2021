@@ -149,7 +149,7 @@ public class Repository {
     }
 
     static void rmCmd(String filePath) {
-        File file = new File(filePath);
+        File file = pathToFile(filePath);
         Index index = readIndex();
         Index commitIndex = treeToIndex(lookupObj(getHeadTreeId(), Tree.class));
         List<String> pathParts = pathToParts(relativePath(file));
@@ -349,6 +349,132 @@ public class Repository {
         if (anyFileInTree(tree, untrackedFiles)) {
             throw error("There is an untracked file in the way; " +
                     "delete it, or add and commit it first.");
+        }
+    }
+
+    static void mergeCmd(String branchName) {
+        validateNoUncommittedChanges();
+        List<String> branchNames = listBranchNames();
+        if (!branchNames.contains(branchName)) {
+            throw error("A branch with that name does not exist.");
+        }
+        if (Objects.equals(getHeadBranchName(), branchName)) {
+            throw error("Cannot merge a branch with itself.");
+        }
+
+        Tree curTree = lookupObj(getHeadTreeId(), Tree.class);
+        validateNoFilesOverwriting(curTree);
+
+        String curCommitId = getHeadCommitId();
+        String givenCommitId = readBranch(branchName).getCommitId();
+        String splitPointId = objId(lookupSplitPointCommit(curCommitId, givenCommitId));
+        if (Objects.equals(splitPointId, givenCommitId)) {
+            System.out.println("Given branch is an ancestor of the current branch.");
+            return;
+        } else if (Objects.equals(splitPointId, curCommitId)) {
+            checkoutBranchCmd(branchName);
+            System.out.println("Current branch fast-forwarded.");
+            return;
+        }
+
+        Index index = readIndex();
+
+        Commit splitPointCommit = lookupObj(splitPointId, Commit.class);
+        Commit givenCommit = lookupObj(givenCommitId, Commit.class);
+        Tree splitPointTree = lookupObj(splitPointCommit.getTreeId(), Tree.class);
+        Tree givenTree = lookupObj(givenCommit.getTreeId(), Tree.class);
+        Map<String, String> curModifiedMap = new HashMap<>(),
+                curAddedMap = new HashMap<>(),
+                curDeletedMap = new HashMap<>(),
+                givenModifiedMap = new HashMap<>(),
+                givenAddedMap = new HashMap<>(),
+                givenDeletedMap = new HashMap<>();
+        diffTreeChanges(splitPointTree, curTree,
+                curModifiedMap, curAddedMap, curDeletedMap);
+        diffTreeChanges(splitPointTree, givenTree,
+                givenModifiedMap, givenAddedMap, givenDeletedMap);
+
+        for (String path : givenDeletedMap.keySet()) {
+            if (!curModifiedMap.containsKey(path)) {
+                // Any files present at the split point, unmodified in the current branch,
+                // and absent in the given branch should be removed (and untracked).
+                deleteFile(pathToFile(path));
+                index.removeLeaf(pathToParts(path));
+            }
+        }
+        for (String path : givenAddedMap.keySet()) {
+            if (!curAddedMap.containsKey(path)) {
+                // Any files that were not present at the split point and are present
+                // only in the given branch should be checked out and staged.
+                String id = givenAddedMap.get(path);
+                restoreFileWithDir(path, id);
+                index.addLeaf(pathToParts(path), id);
+            } else {
+                String curId = curAddedMap.get(path);
+                String givenId = givenAddedMap.get(path);
+                if (!Objects.equals(curId, givenId)) {
+                    // Any files modified in different ways in the current and given
+                    // branches are in conflict.
+                    saveConflictFile(path, curId, givenId);
+                    Blob blob = createBlob(path);
+                    putObj(blob);
+                    index.addLeaf(pathToParts(path), objId(blob));
+                }
+            }
+        }
+        for (String path : curModifiedMap.keySet()) {
+            if (givenDeletedMap.containsKey(path)) {
+                // Any files modified in different ways in the current and given
+                // branches are in conflict.
+                String curId = curModifiedMap.get(path);
+                saveConflictFile(path, curId, null);
+                Blob blob = createBlob(path);
+                putObj(blob);
+                index.addLeaf(pathToParts(path), objId(blob));
+            }
+        }
+        for (String path : givenModifiedMap.keySet()) {
+            if (curDeletedMap.containsKey(path)) {
+                String givenId = givenModifiedMap.get(path);
+                // Any files modified in different ways in the current and given
+                // branches are in conflict.
+                saveConflictFile(path, null, givenId);
+                Blob blob = createBlob(path);
+                putObj(blob);
+                index.addLeaf(pathToParts(path), objId(blob));
+            }
+            if (!curModifiedMap.containsKey(path)) {
+                // Any files that have been modified in the given branch since the split
+                // point, but not modified in the current branch since the split point
+                // should be changed to their versions in the given branch.
+                String id = givenModifiedMap.get(path);
+                restoreFileWithDir(path, id);
+                index.addLeaf(pathToParts(path), id);
+            } else {
+                String curId = curModifiedMap.get(path);
+                String givenId = givenModifiedMap.get(path);
+                if (!Objects.equals(curId, givenId)) {
+                    // Any files modified in different ways in the current and given
+                    // branches are in conflict.
+                    saveConflictFile(path, curId, givenId);
+                    Blob blob = createBlob(path);
+                    putObj(blob);
+                    index.addLeaf(pathToParts(path), objId(blob));
+                }
+            }
+        }
+
+        writeIndex(index);
+
+        commitCmd(String.format("Merged %s into %s.", getHeadBranchName(), branchName));
+    }
+
+    private static void validateNoUncommittedChanges() {
+        List<String> stagedFiles = new LinkedList<>();
+        List<String> removedFiles = new LinkedList<>();
+        diffStagedFiles(stagedFiles, removedFiles);
+        if (!stagedFiles.isEmpty() || !removedFiles.isEmpty()) {
+            throw error("You have uncommitted changes.");
         }
     }
 
@@ -553,14 +679,154 @@ public class Repository {
 
     private static void treeToIndexHelper(Tree tree, Index.Node node) {
         for (Tree.Entry entry : tree.getEntryMap().values()) {
-            if (Tree.Entry.BLOB_TYPE.equals(entry.type)) {
+            if (entry.isBlob()) {
                 node.childMap.put(entry.name, new Index.Node(entry.name, entry.id));
-            } else if (Tree.Entry.TREE_TYPE.equals(entry.type)) {
+            } else if (entry.isTree()) {
                 Index.Node childNode = new Index.Node(entry.name, null, new TreeMap<>());
                 Tree childTree = lookupObj(entry.id, Tree.class);
                 treeToIndexHelper(childTree, childNode);
                 node.childMap.put(entry.name, childNode);
             }
+        }
+    }
+
+    /**
+     * Diff two trees to get modified, added and deleted maps,
+     * map entry is filepath -> id.
+     */
+    static void diffTreeChanges(Tree fromTree, Tree toTree,
+                                Map<String, String> modifiedMap,
+                                Map<String, String> addedMap,
+                                Map<String, String> deletedMap) {
+        List<FileInfo> modifiedFiles = new LinkedList<>(),
+                addedFiles = new LinkedList<>(),
+                deletedFiles = new LinkedList<>();
+        diffTreeChanges(fromTree, toTree, modifiedFiles, addedFiles, deletedFiles);
+        modifiedMap.putAll(FileInfo.toPathMap(modifiedFiles));
+        addedMap.putAll(FileInfo.toPathMap(addedFiles));
+        deletedMap.putAll(FileInfo.toPathMap(deletedFiles));
+    }
+
+    /**
+     * Diff two trees to get modified, added and deleted files.
+     */
+    static void diffTreeChanges(Tree fromTree, Tree toTree,
+                                List<FileInfo> modifiedFiles,
+                                List<FileInfo> addedFiles,
+                                List<FileInfo> deletedFiles) {
+        List<String> parts = new LinkedList<>();
+        for (Tree.Entry entry : fromTree.getEntryMap().values()) {
+            diffTreeChangesHelper(entry,
+                    toTree.getEntryMap().getOrDefault(entry.name, null),
+                    parts, modifiedFiles, addedFiles, deletedFiles);
+        }
+        for (Tree.Entry entry : toTree.getEntryMap().values()) {
+            if (!fromTree.getEntryMap().containsKey(entry.name)) {
+                diffTreeChangesHelper(null, entry, parts,
+                        modifiedFiles, addedFiles, deletedFiles);
+            }
+        }
+    }
+
+    private static void diffTreeChangesHelper(Tree.Entry fromEntry, Tree.Entry toEntry,
+                                              List<String> parts,
+                                              List<FileInfo> modifiedFiles,
+                                              List<FileInfo> addedFiles,
+                                              List<FileInfo> deletedFiles) {
+        if (Objects.isNull(fromEntry)) {
+            parts.add(toEntry.name);
+            String path = relativePath(partsToPath(parts));
+            if (toEntry.isBlob()) {
+                addedFiles.add(new FileInfo(path, toEntry.id));
+            } else {
+                Tree childToTree = lookupObj(toEntry.id, Tree.class);
+                for (Tree.Entry entry : childToTree.getEntryMap().values()) {
+                    diffTreeChangesHelper(null, entry, parts,
+                            modifiedFiles, addedFiles, deletedFiles);
+                }
+            }
+            parts.remove(parts.size() - 1);
+        } else if (Objects.isNull(toEntry)) {
+            parts.add(fromEntry.name);
+            String path = relativePath(partsToPath(parts));
+            if (fromEntry.isBlob()) {
+                deletedFiles.add(new FileInfo(path, fromEntry.id));
+            } else {
+                Tree childFromTree = lookupObj(fromEntry.id, Tree.class);
+                for (Tree.Entry entry : childFromTree.getEntryMap().values()) {
+                    diffTreeChangesHelper(entry, null, parts,
+                            modifiedFiles, addedFiles, deletedFiles);
+                }
+            }
+            parts.remove(parts.size() - 1);
+        } else {
+            parts.add(fromEntry.name);
+            if (Objects.equals(fromEntry.type, toEntry.type)) {
+                if (fromEntry.isTree()) {
+                    Tree childFromTree = lookupObj(fromEntry.id, Tree.class);
+                    Tree childToTree = lookupObj(toEntry.id, Tree.class);
+                    for (Tree.Entry entry : childFromTree.getEntryMap().values()) {
+                        diffTreeChangesHelper(entry,
+                                childToTree.getEntryMap().getOrDefault(entry.name, null),
+                                parts, modifiedFiles, addedFiles, deletedFiles);
+                    }
+                    for (Tree.Entry entry : childToTree.getEntryMap().values()) {
+                        if (!childFromTree.getEntryMap().containsKey(entry.name)) {
+                            diffTreeChangesHelper(null, entry, parts,
+                                    modifiedFiles, addedFiles, deletedFiles);
+                        }
+                    }
+                } else {
+                    if (!Objects.equals(fromEntry.id, toEntry.id)) {
+                        String path = relativePath(partsToPath(parts));
+                        modifiedFiles.add(new FileInfo(path, toEntry.id));
+                    }
+                }
+            } else {
+                if (fromEntry.isBlob()) {
+                    // `file` is a file in fromEntry, and a directory in toEntry
+                    String path = relativePath(partsToPath(parts));
+                    deletedFiles.add(new FileInfo(path, fromEntry.id));
+                    Tree childToTree = lookupObj(toEntry.id, Tree.class);
+                    for (Tree.Entry childToEntry : childToTree.getEntryMap().values()) {
+                        diffTreeChangesHelper(null, childToEntry, parts,
+                                modifiedFiles, addedFiles, deletedFiles);
+                    }
+                } else {
+                    // `file` is a file in toEntry, and a directory in fromEntry
+                    String path = relativePath(partsToPath(parts));
+                    addedFiles.add(new FileInfo(path, toEntry.id));
+                    Tree childFromTree = lookupObj(fromEntry.id, Tree.class);
+                    for (Tree.Entry childFromEntry : childFromTree.getEntryMap().values()) {
+                        diffTreeChangesHelper(childFromEntry, null, parts,
+                                modifiedFiles, addedFiles, deletedFiles);
+                    }
+                }
+            }
+            parts.remove(parts.size() - 1);
+        }
+    }
+
+    static class FileInfo {
+        String path;
+        String id;
+
+        public FileInfo(String path, String id) {
+            this.path = path;
+            this.id = id;
+        }
+
+        @Override
+        public String toString() {
+            return "FileInfo{" +
+                    "path='" + path + '\'' +
+                    ", id='" + id + '\'' +
+                    '}';
+        }
+
+        public static Map<String, String> toPathMap(List<FileInfo> files) {
+            return files.stream()
+                    .collect(Collectors.toMap(file -> file.path, file -> file.id));
         }
     }
 
@@ -649,6 +915,30 @@ public class Repository {
     }
 
     /**
+     * Lookup the split point commit of two given commits, the split point is
+     * the latest common ancestor of two commits.
+     */
+    static Commit lookupSplitPointCommit(String commitId1, String commitId2) {
+        String id1 = commitId1;
+        String id2 = commitId2;
+        while (!Objects.equals(id1, id2)) {
+            Commit commit1 = lookupObj(id1, Commit.class);
+            Commit commit2 = lookupObj(id2, Commit.class);
+            if (commit1.getParentIds().isEmpty()) {
+                id1 = commitId2;
+            } else {
+                id1 = commit1.getParentIds().get(0);
+            }
+            if (commit2.getParentIds().isEmpty()) {
+                id2 = commitId1;
+            } else {
+                id2 = commit2.getParentIds().get(0);
+            }
+        }
+        return lookupObj(id1, Commit.class);
+    }
+
+    /**
      * Lookup the blob with filePath from the given commitId,
      * return null if the blob not exists.
      */
@@ -665,7 +955,7 @@ public class Repository {
         String part = parts.get(0);
         if (tree.getEntryMap().containsKey(part)) {
             Tree.Entry entry = tree.getEntryMap().get(part);
-            if (Tree.Entry.BLOB_TYPE.equals(entry.type) && parts.size() == 1) {
+            if (entry.isBlob() && parts.size() == 1) {
                 return lookupObj(entry.id, Blob.class);
             } else {
                 Tree childTree = lookupObj(entry.id, Tree.class);
@@ -689,7 +979,7 @@ public class Repository {
     private static void restoreWdHelper(Tree srcTree, Tree dstTree, List<String> parts) {
         for (Tree.Entry srcEntry : srcTree.getEntryMap().values()) {
             parts.add(srcEntry.name);
-            File file = pathToFile(relativePath(partsToPath(parts)));
+            File file = pathToFile(partsToPath(parts));
             if (!dstTree.getEntryMap().containsKey(srcEntry.name)) {
                 // Remove files or directories that are not in dstTree.
                 deleteFileOrDir(file);
@@ -698,10 +988,10 @@ public class Repository {
         }
         for (Tree.Entry dstEntry : dstTree.getEntryMap().values()) {
             parts.add(dstEntry.name);
-            File file = pathToFile(relativePath(partsToPath(parts)));
+            File file = pathToFile(partsToPath(parts));
             if (!srcTree.getEntryMap().containsKey(dstEntry.name)) {
                 // Restore files or directories that are not in srcTree.
-                if (Tree.Entry.BLOB_TYPE.equals(dstEntry.type)) {
+                if (dstEntry.isBlob()) {
                     Blob blob = lookupObj(dstEntry.id, Blob.class);
                     restoreFile(file, blob);
                 } else {
@@ -710,7 +1000,7 @@ public class Repository {
             } else {
                 Tree.Entry srcEntry = srcTree.getEntryMap().get(dstEntry.name);
                 if (Objects.equals(srcEntry.type, dstEntry.type)) {
-                    if (Tree.Entry.TREE_TYPE.equals(srcEntry.type)) {
+                    if (srcEntry.isTree()) {
                         Tree childSrcTree = lookupObj(srcEntry.id, Tree.class);
                         Tree childDstTree = lookupObj(dstEntry.id, Tree.class);
                         restoreWdHelper(childSrcTree, childDstTree, parts);
@@ -721,7 +1011,7 @@ public class Repository {
                         }
                     }
                 } else {
-                    if (Tree.Entry.BLOB_TYPE.equals(srcEntry.type)) {
+                    if (srcEntry.isBlob()) {
                         // `file` is a file in srcTree, and a directory in dstTree.
                         deleteFile(file);
                     } else {
@@ -737,14 +1027,14 @@ public class Repository {
     }
 
     static void restoreDir(List<String> parts, Tree tree) {
-        File dir = pathToFile(relativePath(partsToPath(parts)));
+        File dir = pathToFile(partsToPath(parts));
         if (!dir.exists()) {
             createDir(dir);
         }
         for (Tree.Entry entry : tree.getEntryMap().values()) {
             parts.add(entry.name);
-            File file = pathToFile(relativePath(partsToPath(parts)));
-            if (Tree.Entry.BLOB_TYPE.equals(entry.type)) {
+            File file = pathToFile(partsToPath(parts));
+            if (entry.isBlob()) {
                 Blob blob = lookupObj(entry.id, Blob.class);
                 restoreFile(file, blob);
             } else {
@@ -761,6 +1051,40 @@ public class Repository {
 
     static void restoreFile(File file, Blob blob) {
         writeContents(file, blob.getContent());
+    }
+
+    static void restoreFileWithDir(String path, String blobId) {
+        Blob blob = lookupObj(blobId, Blob.class);
+        File file = pathToFile(path);
+        restoreFileWithDir(file, blob);
+    }
+
+    static void restoreFileWithDir(File file, Blob blob) {
+        if (!file.getParentFile().exists()) {
+            createDirWithParents(file.getParentFile());
+        } else {
+            restoreFile(file, blob);
+        }
+    }
+
+    /**
+     * Replace the contents of the conflicted file with curBlobId and givenBlobId,
+     * curBlobId or givenBlobId can be null.
+     */
+    static void saveConflictFile(String path, String curBlobId, String givenBlobId) {
+        String curContent = Objects.nonNull(curBlobId)
+                ? lookupObj(curBlobId, Blob.class).getContent() : "";
+        String givenContent = Objects.nonNull(givenBlobId)
+                ? lookupObj(givenBlobId, Blob.class).getContent() : "";
+        String content = String.format("<<<<<<< HEAD\n"
+                        + "%s"
+                        + "=======\n"
+                        + "%s"
+                        + ">>>>>>>\n",
+                curContent, givenContent);
+        File file = pathToFile(path);
+        createDirWithParents(file.getParentFile());
+        writeContents(file, content);
     }
 
     static String objId(Obj obj) {
@@ -818,8 +1142,8 @@ public class Repository {
     /**
      * Convert relative path to file.
      */
-    static File pathToFile(String relativePath) {
-        return join(CWD, relativePath);
+    static File pathToFile(String filePath) {
+        return join(CWD, relativePath(filePath));
     }
 
     static String relativePath(String filePath) {
@@ -846,11 +1170,26 @@ public class Repository {
         dir.mkdir();
     }
 
+    /**
+     * Create directory, will create parent directories as needed.
+     */
+    static void createDirWithParents(File dir) {
+        File parentDir = dir.getParentFile();
+        if (!parentDir.exists()) {
+            createDirWithParents(parentDir);
+        }
+        if (!dir.exists()) {
+            dir.mkdir();
+        }
+    }
+
     static void deleteFile(File file) {
         file.delete();
     }
 
-    // Delete a file or delete a directory recursively.
+    /**
+     * Delete a file or delete a directory recursively.
+     */
     static void deleteFileOrDir(File file) {
         if (file.isDirectory()) {
             File[] files = file.listFiles();
