@@ -244,20 +244,25 @@ public class Repository {
                 .collect(Collectors.toList());
 
         System.out.printf("=== Branches ===\n"
-                        + "%s\n\n"
+                        + "%s\n"
                         + "=== Staged Files ===\n"
-                        + "%s\n\n"
+                        + "%s\n"
                         + "=== Removed Files ===\n"
-                        + "%s\n\n"
+                        + "%s\n"
                         + "=== Modifications Not Staged For Commit ===\n"
-                        + "%s\n\n"
+                        + "%s\n"
                         + "=== Untracked Files ===\n"
-                        + "%s\n\n",
-                String.join("\n", displayBranches),
-                String.join("\n", stagedFiles),
-                String.join("\n", removedFiles),
-                String.join("\n", displayNotStagedFiles),
-                String.join("\n", untrackedFiles)
+                        + "%s\n",
+                displayBranches.stream().map(item -> item + "\n")
+                        .collect(Collectors.joining("")),
+                stagedFiles.stream().map(item -> item + "\n")
+                        .collect(Collectors.joining("")),
+                removedFiles.stream().map(item -> item + "\n")
+                        .collect(Collectors.joining("")),
+                displayNotStagedFiles.stream().map(item -> item + "\n")
+                        .collect(Collectors.joining("")),
+                untrackedFiles.stream().map(item -> item + "\n")
+                        .collect(Collectors.joining(""))
         );
     }
 
