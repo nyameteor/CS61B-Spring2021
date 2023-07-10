@@ -1,6 +1,7 @@
 package gitlet;
 
 import java.io.File;
+import java.io.Serializable;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
@@ -52,6 +53,12 @@ public class Repository {
     public static final File INDEX_FILE = join(GITLET_DIR, "index");
 
     /**
+     * The global-log file to store all the commit ids ever made.
+     * DOES NOT exist in real git.
+     */
+    public static final File GLOBAL_LOG_FILE = join(REF_DIR, "global-log");
+
+    /**
      * Default branch name.
      */
     public static final String DEFAULT_BRANCH_NAME = "master";
@@ -98,6 +105,10 @@ public class Repository {
         Head head = new Head();
         head.setBranchName(branch.getName());
         writeHead(head);
+
+        GlobalLog globalLog = new GlobalLog();
+        globalLog.getCommitIds().add(objId(commit));
+        writeGlobalLog(globalLog);
     }
 
     static void addCmd(String filePath) {
@@ -144,6 +155,10 @@ public class Repository {
         Branch branch = readBranch(getHeadBranchName());
         branch.setCommitId(commitId);
         writeBranch(branch);
+
+        GlobalLog globalLog = readGlobalLog();
+        globalLog.getCommitIds().add(objId(commit));
+        writeGlobalLog(globalLog);
     }
 
     static void rmCmd(String filePath) {
@@ -538,6 +553,26 @@ public class Repository {
         deleteFile(join(HEADS_DIR, branchName));
     }
 
+    static GlobalLog readGlobalLog() {
+        return readObject(GLOBAL_LOG_FILE, GlobalLog.class);
+    }
+
+    static void writeGlobalLog(GlobalLog globalLog) {
+        writeObject(GLOBAL_LOG_FILE, globalLog);
+    }
+
+    static class GlobalLog implements Serializable {
+        List<String> commitIds;
+
+        public GlobalLog() {
+            this.commitIds = new LinkedList<>();
+        }
+
+        public List<String> getCommitIds() {
+            return commitIds;
+        }
+    }
+
     /* INDEX UTILS */
 
     static Index readIndex() {
@@ -894,18 +929,38 @@ public class Repository {
      * The order of the commits does not matter.
      */
     static List<Commit> lookupGlobalCommits(CommitFilter filter) {
+        List<String> commitIds = readGlobalLog().getCommitIds();
+        List<Commit> commits = commitIds.stream()
+                .map(id -> lookupObj(id, Commit.class))
+                .filter(filter::accept)
+                .collect(Collectors.toList());
+        Collections.reverse(commits);
+        return commits;
+    }
+
+    /**
+     * Lookup the commits from all branches.
+     */
+    static List<Commit> lookupCommitsFromAllBranches() {
+        return lookupCommitsFromAllBranches(commit -> true);
+    }
+
+    /**
+     * Lookup the commits from all branches that satisfy the specified filter.
+     */
+    static List<Commit> lookupCommitsFromAllBranches(CommitFilter filter) {
         List<Commit> commits = new LinkedList<>();
         List<String> commitIds = listBranchNames().stream()
                 .map((name) -> readBranch(name).getCommitId())
                 .collect(Collectors.toList());
-        lookupGlobalCommitsHelper(commitIds, filter, new HashSet<>(), commits);
+        lookupCommitsFromAllBranchesHelper(commitIds, filter, new HashSet<>(), commits);
         return commits;
     }
 
-    private static void lookupGlobalCommitsHelper(List<String> commitIds,
-                                                  CommitFilter filter,
-                                                  Set<String> seenCommitIds,
-                                                  List<Commit> result) {
+    private static void lookupCommitsFromAllBranchesHelper(List<String> commitIds,
+                                                           CommitFilter filter,
+                                                           Set<String> seenCommitIds,
+                                                           List<Commit> result) {
         for (String id : commitIds) {
             if (seenCommitIds.contains(id)) {
                 return;
@@ -915,7 +970,8 @@ public class Repository {
             if (filter.accept(commit)) {
                 result.add(commit);
             }
-            lookupGlobalCommitsHelper(commit.getParentIds(), filter, seenCommitIds, result);
+            lookupCommitsFromAllBranchesHelper(commit.getParentIds(),
+                    filter, seenCommitIds, result);
         }
     }
 
