@@ -491,7 +491,7 @@ public class Repository {
 
         writeIndex(index);
 
-        commitCmd(String.format("Merged %s into %s.", getHeadBranchName(), branchName));
+        commitCmd(String.format("Merged %s into %s.", branchName, getHeadBranchName()));
     }
 
     private static void validateNoUncommittedChanges() {
