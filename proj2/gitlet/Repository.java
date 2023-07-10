@@ -1,10 +1,13 @@
 package gitlet;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static gitlet.Utils.*;
 
@@ -57,11 +60,6 @@ public class Repository {
      * Default filenames to ignore.
      */
     public static final Set<String> DEFAULT_IGNORE_FILES = Set.of(".gitlet");
-
-    /**
-     * System file separator.
-     */
-    public static final String FILE_SEPARATOR = System.getProperty("file.separator");
 
     /**
      * Date pattern.
@@ -267,13 +265,18 @@ public class Repository {
         checkoutFileCmd(getHeadCommitId(), filePath);
     }
 
-    static void checkoutFileCmd(String commitId, String filePath) {
-        Commit commit = lookupObj(commitId, Commit.class);
-        if (Objects.isNull(commit)) {
+    static void checkoutFileCmd(String prefixOfCommitId, String filePath) {
+        String commitId;
+        try {
+            commitId = idFromPrefix(prefixOfCommitId);
+            lookupObj(commitId, Commit.class);
+        } catch (GitletException e) {
             throw error("No commit with that id exists.");
         }
-        Blob blob = lookupBlob(commitId, filePath);
-        if (Objects.isNull(blob)) {
+        Blob blob;
+        try {
+            blob = lookupBlob(commitId, filePath);
+        } catch (GitletException e) {
             throw error("File does not exist in that commit.");
         }
         restoreFile(filePath, blob);
@@ -323,9 +326,11 @@ public class Repository {
         removeBranch(branchName);
     }
 
-    static void resetCmd(String commitId) {
+    static void resetCmd(String prefixOfCommitId) {
         Commit commit;
+        String commitId;
         try {
+            commitId = idFromPrefix(prefixOfCommitId);
             commit = lookupObj(commitId, Commit.class);
         } catch (GitletException e) {
             throw error("No commit with that id exists.");
@@ -833,7 +838,7 @@ public class Repository {
     /* OBJECT UTILS */
 
     /**
-     * Lookup an object from object database, return null if file not exists.
+     * Lookup an object from object database by id, throw error if not exists.
      */
     static <T extends Obj> T lookupObj(String id, Class<T> expectedObjClass) {
         File file = objFilepath(id);
@@ -940,12 +945,16 @@ public class Repository {
 
     /**
      * Lookup the blob with filePath from the given commitId,
-     * return null if the blob not exists.
+     * throw error if the blob not exists.
      */
     static Blob lookupBlob(String commitId, String filePath) {
         Commit commit = lookupObj(commitId, Commit.class);
         Tree tree = lookupObj(commit.getTreeId(), Tree.class);
-        return lookupBlobHelper(tree, pathToParts(relativePath(filePath)));
+        Blob blob = lookupBlobHelper(tree, pathToParts(relativePath(filePath)));
+        if (Objects.isNull(blob)) {
+            throw error("Blob does not exist in Commit");
+        }
+        return blob;
     }
 
     private static Blob lookupBlobHelper(Tree tree, List<String> parts) {
@@ -1112,6 +1121,32 @@ public class Repository {
         return new Blob(readContentsAsString(file));
     }
 
+    static String idFromPrefix(String prefixOfId) {
+        int length = prefixOfId.length();
+        if (length == 40) {
+            return prefixOfId;
+        } else if (length >= 2 && length < 40) {
+            String dirName = prefixOfId.substring(0, 2);
+            String fileName = prefixOfId.substring(2);
+            List<String> dirNames = Arrays.stream(listFiles(OBJECT_DIR))
+                    .map(File::getName).collect(Collectors.toList());
+            if (dirNames.contains(dirName)) {
+                List<String> fileNames = plainFilenamesIn(join(OBJECT_DIR, dirName));
+                if (Objects.nonNull(fileNames)) {
+                    if (length == 2 && fileNames.size() == 1) {
+                        return dirName + fileNames.get(0);
+                    }
+                    List<String> matchedFileNames = fileNames.stream()
+                            .filter(f -> f.startsWith(fileName)).collect(Collectors.toList());
+                    if (matchedFileNames.size() == 1) {
+                        return dirName + matchedFileNames.get(0);
+                    }
+                }
+            }
+        }
+        throw error("Incorrect prefix.");
+    }
+
     /* FILE UTILS */
 
     static File[] listFiles(File dir) {
@@ -1158,12 +1193,15 @@ public class Repository {
         return base.toURI().relativize(file.toURI()).getPath();
     }
 
-    static List<String> pathToParts(String path) {
-        return List.of(path.split(FILE_SEPARATOR));
+    static List<String> pathToParts(String filePath) {
+        Path path = Paths.get(relativePath(filePath));
+        return StreamSupport.stream(path.spliterator(), false)
+                .map(Path::toString)
+                .collect(Collectors.toList());
     }
 
     static String partsToPath(List<String> parts) {
-        return String.join(FILE_SEPARATOR, parts);
+        return relativePath(join(CWD, parts.toArray(String[]::new)));
     }
 
     static void createDir(File dir) {
