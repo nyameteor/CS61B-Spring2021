@@ -16,7 +16,7 @@ public class Tree extends Obj {
         String type;
         String id;
 
-        public Entry(String name, String type, String id) {
+        Entry(String name, String type, String id) {
             this.name = name;
             this.type = type;
             this.id = id;
@@ -32,11 +32,10 @@ public class Tree extends Obj {
 
         @Override
         public String toString() {
-            return "Entry{" +
-                    "name='" + name + '\'' +
-                    ", type='" + type + '\'' +
-                    ", id='" + id + '\'' +
-                    '}';
+            return "Entry{" + "name='" + name + '\''
+                    + ", type='" + type + '\''
+                    + ", id='" + id + '\''
+                    + '}';
         }
     }
 
@@ -52,9 +51,8 @@ public class Tree extends Obj {
 
     @Override
     public String toString() {
-        return "Tree{" +
-                "entryMap=" + entryMap +
-                '}';
+        return "Tree{" + "entryMap=" + entryMap
+                + '}';
     }
 
     @Override

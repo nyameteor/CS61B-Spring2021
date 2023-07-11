@@ -114,13 +114,12 @@ public class Repository {
     }
 
     static void addCmd(String filePath) {
-        File file = new File(filePath);
+        File file = pathToFile(filePath);
         if (!file.exists()) {
             throw error("File does not exist.");
         }
 
-        Blob blob = createBlob(file);
-        putObj(blob);
+        Blob blob = saveFileAsBlob(file);
 
         Index index = readIndex();
         index.addLeaf(pathToParts(relativePath(file)), objId(blob));
@@ -403,8 +402,6 @@ public class Repository {
             return;
         }
 
-        Index index = readIndex();
-
         Map<String, String> curModifiedMap = new HashMap<>(),
                 curAddedMap = new HashMap<>(),
                 curDeletedMap = new HashMap<>(),
@@ -416,6 +413,26 @@ public class Repository {
         diffTreeChanges(splitPointTree, givenTree,
                 givenModifiedMap, givenAddedMap, givenDeletedMap);
 
+        boolean conflict = handleMerge(curModifiedMap, curAddedMap, curDeletedMap,
+                givenModifiedMap, givenAddedMap, givenDeletedMap);
+
+        makeCommit(String.format("Merged %s into %s.", branchName, getHeadBranchName()),
+                curCommitId, givenCommitId);
+        if (conflict) {
+            throw error("Encountered a merge conflict.");
+        }
+    }
+
+    /**
+     * Handle merge to update files and index, return true if encountered a merge conflict.
+     */
+    private static boolean handleMerge(Map<String, String> curModifiedMap,
+                                       Map<String, String> curAddedMap,
+                                       Map<String, String> curDeletedMap,
+                                       Map<String, String> givenModifiedMap,
+                                       Map<String, String> givenAddedMap,
+                                       Map<String, String> givenDeletedMap) {
+        Index index = readIndex();
         boolean conflict = false;
         for (String path : givenDeletedMap.keySet()) {
             if (!curModifiedMap.containsKey(path)) {
@@ -436,37 +453,31 @@ public class Repository {
                 String curId = curAddedMap.get(path);
                 String givenId = givenAddedMap.get(path);
                 if (!Objects.equals(curId, givenId)) {
-                    // Any files modified in different ways in the current and given
-                    // branches are in conflict.
+                    // Conflict.
                     conflict = true;
-                    saveConflictFile(path, curId, givenId);
-                    Blob blob = createBlob(path);
-                    putObj(blob);
+                    writeConflictFile(path, curId, givenId);
+                    Blob blob = saveFileAsBlob(path);
                     index.addLeaf(pathToParts(path), objId(blob));
                 }
             }
         }
         for (String path : curModifiedMap.keySet()) {
             if (givenDeletedMap.containsKey(path)) {
-                // Any files modified in different ways in the current and given
-                // branches are in conflict.
+                // Conflict.
                 conflict = true;
                 String curId = curModifiedMap.get(path);
-                saveConflictFile(path, curId, null);
-                Blob blob = createBlob(path);
-                putObj(blob);
+                writeConflictFile(path, curId, null);
+                Blob blob = saveFileAsBlob(path);
                 index.addLeaf(pathToParts(path), objId(blob));
             }
         }
         for (String path : givenModifiedMap.keySet()) {
             if (curDeletedMap.containsKey(path)) {
                 String givenId = givenModifiedMap.get(path);
-                // Any files modified in different ways in the current and given
-                // branches are in conflict.
+                // Conflict.
                 conflict = true;
-                saveConflictFile(path, null, givenId);
-                Blob blob = createBlob(path);
-                putObj(blob);
+                writeConflictFile(path, null, givenId);
+                Blob blob = saveFileAsBlob(path);
                 index.addLeaf(pathToParts(path), objId(blob));
             }
             if (!curModifiedMap.containsKey(path)) {
@@ -480,24 +491,16 @@ public class Repository {
                 String curId = curModifiedMap.get(path);
                 String givenId = givenModifiedMap.get(path);
                 if (!Objects.equals(curId, givenId)) {
-                    // Any files modified in different ways in the current and given
-                    // branches are in conflict.
+                    // Conflict.
                     conflict = true;
-                    saveConflictFile(path, curId, givenId);
-                    Blob blob = createBlob(path);
-                    putObj(blob);
+                    writeConflictFile(path, curId, givenId);
+                    Blob blob = saveFileAsBlob(path);
                     index.addLeaf(pathToParts(path), objId(blob));
                 }
             }
         }
-
         writeIndex(index);
-
-        makeCommit(String.format("Merged %s into %s.", branchName, getHeadBranchName()),
-                curCommitId, givenCommitId);
-        if (conflict) {
-            throw error("Encountered a merge conflict.");
-        }
+        return conflict;
     }
 
     private static void validateNoUncommittedChanges() {
@@ -513,8 +516,8 @@ public class Repository {
         List<String> untrackedFiles = new LinkedList<>();
         diffUntrackedFiles(untrackedFiles);
         if (anyFileInTree(givenTree, untrackedFiles)) {
-            throw error("There is an untracked file in the way; " +
-                    "delete it, or add and commit it first.");
+            throw error("There is an untracked file in the way; "
+                    + "delete it, or add and commit it first.");
         }
     }
 
@@ -579,7 +582,7 @@ public class Repository {
     static class GlobalLog implements Serializable {
         List<String> commitIds;
 
-        public GlobalLog() {
+        GlobalLog() {
             this.commitIds = new LinkedList<>();
         }
 
@@ -871,17 +874,9 @@ public class Repository {
         String path;
         String id;
 
-        public FileInfo(String path, String id) {
+        FileInfo(String path, String id) {
             this.path = path;
             this.id = id;
-        }
-
-        @Override
-        public String toString() {
-            return "FileInfo{" +
-                    "path='" + path + '\'' +
-                    ", id='" + id + '\'' +
-                    '}';
         }
 
         public static Map<String, String> toPathMap(List<FileInfo> files) {
@@ -1157,7 +1152,7 @@ public class Repository {
      * Replace the contents of the conflicted file with curBlobId and givenBlobId,
      * curBlobId or givenBlobId can be null.
      */
-    static void saveConflictFile(String path, String curBlobId, String givenBlobId) {
+    static void writeConflictFile(String path, String curBlobId, String givenBlobId) {
         String curContent = Objects.nonNull(curBlobId)
                 ? lookupObj(curBlobId, Blob.class).getContent() : "";
         String givenContent = Objects.nonNull(givenBlobId)
@@ -1186,6 +1181,20 @@ public class Repository {
 
     static File objFilepath(String id) {
         return join(Repository.OBJECT_DIR, id.substring(0, 2), id.substring(2));
+    }
+
+    static Blob saveFileAsBlob(String path) {
+        return saveFileAsBlob(pathToFile(path));
+    }
+
+    /**
+     * Create a blob of the file and save it to object database,
+     * return the saved blob.
+     */
+    static Blob saveFileAsBlob(File file) {
+        Blob blob = createBlob(file);
+        putObj(blob);
+        return blob;
     }
 
     static Blob createBlob(String path) {
@@ -1229,8 +1238,8 @@ public class Repository {
     }
 
     static File[] listFiles(File dir, Set<String> ignoreFiles) {
-        return dir.listFiles(
-                (d, name) -> !ignoreFiles.contains(Utils.join(d, name).getName()));
+        return dir.listFiles((d, name) ->
+                !ignoreFiles.contains(Utils.join(d, name).getName()));
     }
 
     static Set<String> listAllFilePaths(File dir) {
@@ -1250,7 +1259,7 @@ public class Repository {
     }
 
     /**
-     * Convert relative path to file.
+     * Convert path to file.
      */
     static File pathToFile(String filePath) {
         return join(CWD, relativePath(filePath));

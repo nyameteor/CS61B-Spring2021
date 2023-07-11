@@ -28,10 +28,9 @@ public class Head implements Dumpable {
 
     @Override
     public String toString() {
-        return "Head{" +
-                "branchName='" + branchName + '\'' +
-                ", commitId='" + commitId + '\'' +
-                '}';
+        return "Head{" + "branchName='" + branchName + '\''
+                + ", commitId='" + commitId + '\''
+                + '}';
     }
 
     @Override

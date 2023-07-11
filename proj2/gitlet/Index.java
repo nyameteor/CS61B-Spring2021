@@ -15,13 +15,13 @@ public class Index implements Dumpable {
         final String id;
         Map<String, Node> childMap;
 
-        public Node(String name, String id, Map<String, Node> childMap) {
+        Node(String name, String id, Map<String, Node> childMap) {
             this.name = name;
             this.id = id;
             this.childMap = childMap;
         }
 
-        public Node(String name, String id) {
+        Node(String name, String id) {
             this.name = name;
             this.id = id;
             this.childMap = null;
@@ -29,11 +29,10 @@ public class Index implements Dumpable {
 
         @Override
         public String toString() {
-            return "Node{" +
-                    "name='" + name + '\'' +
-                    ", id='" + id + '\'' +
-                    ", childMap=" + childMap +
-                    '}';
+            return "Node{" + "name='" + name + '\''
+                    + ", id='" + id + '\''
+                    + ", childMap=" + childMap
+                    + '}';
         }
     }
 
@@ -47,9 +46,8 @@ public class Index implements Dumpable {
 
     @Override
     public String toString() {
-        return "Index{" +
-                "root=" + root +
-                '}';
+        return "Index{" + "root=" + root
+                + '}';
     }
 
     @Override

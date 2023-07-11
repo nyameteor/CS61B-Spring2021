@@ -4,7 +4,7 @@ package gitlet;
  * Represents a gitlet blob object.
  */
 public class Blob extends Obj {
-    private String content;
+    private final String content;
 
     public Blob(String content) {
         this.content = content;
@@ -14,15 +14,10 @@ public class Blob extends Obj {
         return content;
     }
 
-    public void setContent(String content) {
-        this.content = content;
-    }
-
     @Override
     public String toString() {
-        return "Blob{" +
-                "content='" + content + '\'' +
-                '}';
+        return "Blob{" + "content='" + content + '\''
+                + '}';
     }
 
     @Override

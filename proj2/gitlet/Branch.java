@@ -31,10 +31,9 @@ public class Branch implements Dumpable {
 
     @Override
     public String toString() {
-        return "Branch{" +
-                "name='" + name + '\'' +
-                ", commitId='" + commitId + '\'' +
-                '}';
+        return "Branch{" + "name='" + name + '\''
+                + ", commitId='" + commitId + '\''
+                + '}';
     }
 
     @Override

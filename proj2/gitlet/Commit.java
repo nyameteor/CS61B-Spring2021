@@ -58,12 +58,11 @@ public class Commit extends Obj {
 
     @Override
     public String toString() {
-        return "Commit{" +
-                "date=" + date +
-                ", treeId='" + treeId + '\'' +
-                ", message='" + message + '\'' +
-                ", parentIds=" + parentIds +
-                '}';
+        return "Commit{" + "date=" + date
+                + ", treeId='" + treeId + '\''
+                + ", message='" + message + '\''
+                + ", parentIds=" + parentIds
+                + '}';
     }
 
     @Override
