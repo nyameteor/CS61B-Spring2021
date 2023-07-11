@@ -1,7 +1,9 @@
 package gitlet;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
@@ -137,6 +139,10 @@ public class Repository {
             throw error("No changes added to the commit.");
         }
 
+        makeCommit(message, getHeadCommitId());
+    }
+
+    private static void makeCommit(String message, String... parentCommitIds) {
         Index index = readIndex();
         List<Tree> trees = indexToTrees(index);
         for (Tree tree : trees) {
@@ -144,9 +150,7 @@ public class Repository {
         }
         Tree rootTree = trees.get(trees.size() - 1);
 
-        List<String> parentIds = new LinkedList<>();
-        String headCommitId = getHeadCommitId();
-        parentIds.add(headCommitId);
+        List<String> parentIds = List.of(parentCommitIds);
 
         Commit commit = new Commit(new Date(), objId(rootTree), message, parentIds);
         String commitId = objId(commit);
@@ -299,7 +303,7 @@ public class Repository {
         } catch (GitletException e) {
             throw error("File does not exist in that commit.");
         }
-        restoreFile(filePath, blob);
+        restoreFile(pathToFile(filePath), blob);
     }
 
     static void checkoutBranchCmd(String branchName) {
@@ -368,15 +372,6 @@ public class Repository {
         writeBranch(branch);
     }
 
-    private static void validateNoFilesOverwriting(Tree tree) {
-        List<String> untrackedFiles = new LinkedList<>();
-        diffUntrackedFiles(untrackedFiles);
-        if (anyFileInTree(tree, untrackedFiles)) {
-            throw error("There is an untracked file in the way; " +
-                    "delete it, or add and commit it first.");
-        }
-    }
-
     static void mergeCmd(String branchName) {
         validateNoUncommittedChanges();
         List<String> branchNames = listBranchNames();
@@ -387,12 +382,18 @@ public class Repository {
             throw error("Cannot merge a branch with itself.");
         }
 
-        Tree curTree = lookupObj(getHeadTreeId(), Tree.class);
-        validateNoFilesOverwriting(curTree);
-
         String curCommitId = getHeadCommitId();
         String givenCommitId = readBranch(branchName).getCommitId();
         String splitPointId = objId(lookupSplitPointCommit(curCommitId, givenCommitId));
+        Commit curCommit = lookupObj(curCommitId, Commit.class);
+        Commit givenCommit = lookupObj(givenCommitId, Commit.class);
+        Commit splitPointCommit = lookupObj(splitPointId, Commit.class);
+        Tree curTree = lookupObj(curCommit.getTreeId(), Tree.class);
+        Tree givenTree = lookupObj(givenCommit.getTreeId(), Tree.class);
+        Tree splitPointTree = lookupObj(splitPointCommit.getTreeId(), Tree.class);
+
+        validateNoFilesOverwriting(givenTree);
+
         if (Objects.equals(splitPointId, givenCommitId)) {
             System.out.println("Given branch is an ancestor of the current branch.");
             return;
@@ -404,10 +405,6 @@ public class Repository {
 
         Index index = readIndex();
 
-        Commit splitPointCommit = lookupObj(splitPointId, Commit.class);
-        Commit givenCommit = lookupObj(givenCommitId, Commit.class);
-        Tree splitPointTree = lookupObj(splitPointCommit.getTreeId(), Tree.class);
-        Tree givenTree = lookupObj(givenCommit.getTreeId(), Tree.class);
         Map<String, String> curModifiedMap = new HashMap<>(),
                 curAddedMap = new HashMap<>(),
                 curDeletedMap = new HashMap<>(),
@@ -419,6 +416,7 @@ public class Repository {
         diffTreeChanges(splitPointTree, givenTree,
                 givenModifiedMap, givenAddedMap, givenDeletedMap);
 
+        boolean conflict = false;
         for (String path : givenDeletedMap.keySet()) {
             if (!curModifiedMap.containsKey(path)) {
                 // Any files present at the split point, unmodified in the current branch,
@@ -432,7 +430,7 @@ public class Repository {
                 // Any files that were not present at the split point and are present
                 // only in the given branch should be checked out and staged.
                 String id = givenAddedMap.get(path);
-                restoreFileWithDir(path, id);
+                restoreFile(path, id);
                 index.addLeaf(pathToParts(path), id);
             } else {
                 String curId = curAddedMap.get(path);
@@ -440,6 +438,7 @@ public class Repository {
                 if (!Objects.equals(curId, givenId)) {
                     // Any files modified in different ways in the current and given
                     // branches are in conflict.
+                    conflict = true;
                     saveConflictFile(path, curId, givenId);
                     Blob blob = createBlob(path);
                     putObj(blob);
@@ -451,6 +450,7 @@ public class Repository {
             if (givenDeletedMap.containsKey(path)) {
                 // Any files modified in different ways in the current and given
                 // branches are in conflict.
+                conflict = true;
                 String curId = curModifiedMap.get(path);
                 saveConflictFile(path, curId, null);
                 Blob blob = createBlob(path);
@@ -463,6 +463,7 @@ public class Repository {
                 String givenId = givenModifiedMap.get(path);
                 // Any files modified in different ways in the current and given
                 // branches are in conflict.
+                conflict = true;
                 saveConflictFile(path, null, givenId);
                 Blob blob = createBlob(path);
                 putObj(blob);
@@ -473,7 +474,7 @@ public class Repository {
                 // point, but not modified in the current branch since the split point
                 // should be changed to their versions in the given branch.
                 String id = givenModifiedMap.get(path);
-                restoreFileWithDir(path, id);
+                restoreFile(path, id);
                 index.addLeaf(pathToParts(path), id);
             } else {
                 String curId = curModifiedMap.get(path);
@@ -481,6 +482,7 @@ public class Repository {
                 if (!Objects.equals(curId, givenId)) {
                     // Any files modified in different ways in the current and given
                     // branches are in conflict.
+                    conflict = true;
                     saveConflictFile(path, curId, givenId);
                     Blob blob = createBlob(path);
                     putObj(blob);
@@ -491,7 +493,11 @@ public class Repository {
 
         writeIndex(index);
 
-        commitCmd(String.format("Merged %s into %s.", branchName, getHeadBranchName()));
+        makeCommit(String.format("Merged %s into %s.", branchName, getHeadBranchName()),
+                curCommitId, givenCommitId);
+        if (conflict) {
+            throw error("Encountered a merge conflict.");
+        }
     }
 
     private static void validateNoUncommittedChanges() {
@@ -500,6 +506,15 @@ public class Repository {
         diffStagedFiles(stagedFiles, removedFiles);
         if (!stagedFiles.isEmpty() || !removedFiles.isEmpty()) {
             throw error("You have uncommitted changes.");
+        }
+    }
+
+    private static void validateNoFilesOverwriting(Tree givenTree) {
+        List<String> untrackedFiles = new LinkedList<>();
+        diffUntrackedFiles(untrackedFiles);
+        if (anyFileInTree(givenTree, untrackedFiles)) {
+            throw error("There is an untracked file in the way; " +
+                    "delete it, or add and commit it first.");
         }
     }
 
@@ -985,23 +1000,37 @@ public class Repository {
      * the latest common ancestor of two commits.
      */
     static Commit lookupSplitPointCommit(String commitId1, String commitId2) {
-        String id1 = commitId1;
-        String id2 = commitId2;
-        while (!Objects.equals(id1, id2)) {
-            Commit commit1 = lookupObj(id1, Commit.class);
-            Commit commit2 = lookupObj(id2, Commit.class);
-            if (commit1.getParentIds().isEmpty()) {
-                id1 = commitId2;
-            } else {
-                id1 = commit1.getParentIds().get(0);
-            }
-            if (commit2.getParentIds().isEmpty()) {
-                id2 = commitId1;
-            } else {
-                id2 = commit2.getParentIds().get(0);
+        TreeMap<Integer, String> splitPointMap = new TreeMap<>();
+        lookupSplitPointCommitHelper(commitId1, commitId2,
+                commitId1, commitId2, 0, splitPointMap);
+        String splitPointId = splitPointMap.firstEntry().getValue();
+        return lookupObj(splitPointId, Commit.class);
+    }
+
+    private static void lookupSplitPointCommitHelper(String id1, String id2,
+                                                     String commitId1, String commitId2,
+                                                     int depth,
+                                                     TreeMap<Integer, String> splitPointMap) {
+        if (Objects.equals(id1, id2)) {
+            splitPointMap.put(depth, id1);
+            return;
+        }
+        Commit commit1 = lookupObj(id1, Commit.class);
+        Commit commit2 = lookupObj(id2, Commit.class);
+        List<String> parentIdList1 = commit1.getParentIds();
+        if (parentIdList1.isEmpty()) {
+            parentIdList1.add(commitId2);
+        }
+        List<String> parentIdList2 = commit2.getParentIds();
+        if (parentIdList2.isEmpty()) {
+            parentIdList2.add(commitId1);
+        }
+        for (String parentId1 : parentIdList1) {
+            for (String parentId2 : parentIdList2) {
+                lookupSplitPointCommitHelper(parentId1, parentId2, commitId1, commitId2,
+                        depth + 1, splitPointMap);
             }
         }
-        return lookupObj(id1, Commit.class);
     }
 
     /**
@@ -1115,26 +1144,13 @@ public class Repository {
         }
     }
 
-    static void restoreFile(String path, Blob blob) {
+    static void restoreFile(String path, String blobId) {
+        Blob blob = lookupObj(blobId, Blob.class);
         restoreFile(pathToFile(path), blob);
     }
 
     static void restoreFile(File file, Blob blob) {
-        writeContents(file, blob.getContent());
-    }
-
-    static void restoreFileWithDir(String path, String blobId) {
-        Blob blob = lookupObj(blobId, Blob.class);
-        File file = pathToFile(path);
-        restoreFileWithDir(file, blob);
-    }
-
-    static void restoreFileWithDir(File file, Blob blob) {
-        if (!file.getParentFile().exists()) {
-            createDirWithParents(file.getParentFile());
-        } else {
-            restoreFile(file, blob);
-        }
+        writeFile(file, blob.getContent());
     }
 
     /**
@@ -1152,9 +1168,7 @@ public class Repository {
                         + "%s"
                         + ">>>>>>>\n",
                 curContent, givenContent);
-        File file = pathToFile(path);
-        createDirWithParents(file.getParentFile());
-        writeContents(file, content);
+        writeFile(pathToFile(path), content);
     }
 
     static String objId(Obj obj) {
@@ -1270,15 +1284,25 @@ public class Repository {
     }
 
     /**
-     * Create directory, will create parent directories as needed.
+     * Write content to file, will create parent directories as needed.
      */
-    static void createDirWithParents(File dir) {
-        File parentDir = dir.getParentFile();
-        if (!parentDir.exists()) {
-            createDirWithParents(parentDir);
-        }
-        if (!dir.exists()) {
-            dir.mkdir();
+    static void writeFile(File file, String content) {
+        createParentDirs(file);
+        writeContents(file, content);
+    }
+
+    /**
+     * Create parent directories of file as needed.
+     */
+    static void createParentDirs(File file) {
+        List<String> parts = pathToParts(relativePath(file));
+        if (parts.size() >= 2) {
+            String parentDir = partsToPath(parts.subList(0, parts.size() - 1));
+            try {
+                Files.createDirectories(Paths.get(parentDir));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
