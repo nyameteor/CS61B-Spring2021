@@ -1,5 +1,7 @@
 # Gitlet Design Document
 
+Source code: [gitlet](gitlet)
+
 ## Classes and Data Structures
 
 ### Blob
